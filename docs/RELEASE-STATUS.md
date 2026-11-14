@@ -24,3 +24,16 @@
 ## Conséquence
 
 Le livrable contient le code source, les conteneurs, les scripts, les tests backend et la documentation. Il ne doit pas être considéré comme certifié en production tant que les contrôles non exécutés n'ont pas été passés dans l'environnement cible. Commencer par un déploiement de laboratoire et un Realm non critique.
+
+
+## Correctif 1.0.3 — persistance de session frontend
+
+- Le client Axios ne supprime plus le jeton local sur chaque réponse HTTP 401.
+- Les tentatives de connexion `/auth/login` n'envoient plus un éventuel ancien jeton.
+- Le chargement initial valide désormais la session avec `/auth/me` avant de charger les autres ressources.
+- Un 401 provenant d'une autre route déclenche une nouvelle vérification de `/auth/me` ; la session n'est supprimée que si cette vérification confirme qu'elle est invalide.
+- Les refus d'accès sur les autres routes sont affichés sans déconnecter automatiquement l'utilisateur.
+
+### Contrôles du correctif 1.0.3
+
+À exécuter avant validation de production : compilation frontend (`npm run build`), tests backend (`pytest -q`) et reconstruction des images via Portainer. L'intégration réelle doit ensuite être vérifiée avec une connexion utilisateur et une requête Keycloak volontairement refusée.

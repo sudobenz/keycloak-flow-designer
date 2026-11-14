@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import api from './api'
 import Designer from './components/Designer.vue'
+import { createUuid } from './utils/id'
 
 const token=ref(localStorage.getItem('kfd_token')||'')
 const username=ref('admin'), password=ref(''), role=ref('viewer'), error=ref(''), info=ref('')
@@ -16,10 +17,85 @@ const currentPassword=ref(''),newPassword=ref(''),historyProjectId=ref(''),histo
 const canAdmin=computed(()=>role.value==='admin')
 function applyTheme(){document.documentElement.dataset.theme=dark.value?'dark':'light';localStorage.setItem('kfd_theme',dark.value?'dark':'light')}
 function message(v:string){info.value=v;setTimeout(()=>{if(info.value===v)info.value=''},5000)}
-async function login(){error.value='';try{const r=await api.post('/auth/login',{username:username.value,password:password.value});token.value=r.data.access_token;role.value=r.data.role;localStorage.setItem('kfd_token',token.value);username.value=r.data.username;await loadAll()}catch(e:any){error.value=e.response?.data?.detail||'Connexion impossible'}}
-function logout(){token.value='';role.value='viewer';localStorage.removeItem('kfd_token');page.value='designer'}
-async function loadAll(){if(!token.value)return;try{const [i,p,m]=await Promise.all([api.get('/instances'),api.get('/projects'),api.get('/auth/me')]);instances.value=i.data;projects.value=p.data;role.value=m.data.role;username.value=m.data.username;if(canAdmin.value){users.value=(await api.get('/users')).data;backups.value=(await api.get('/backups')).data;auditEvents.value=(await api.get('/audit')).data}if(!project.value)newProject()}catch(e:any){logout();error.value='Session expirée ou API indisponible.'}}
-function newProject(){project.value={schemaVersion:'1.0',project:{id:crypto.randomUUID(),name:'Nouveau parcours',description:''},target:{},flow:{alias:'browser-custom',description:'',topLevel:true,providerId:'basic-flow',builtIn:false,nodes:[]}};page.value='designer'}
+async function login(){
+ error.value=''
+ try{
+  const r=await api.post('/auth/login',{username:username.value,password:password.value})
+  token.value=r.data.access_token
+  role.value=r.data.role
+  username.value=r.data.username
+  localStorage.setItem('kfd_token',token.value)
+  await loadAll()
+ }catch(e:any){
+  error.value=e.response?.data?.detail||'Connexion impossible'
+ }
+}
+function logout(){
+ token.value=''
+ role.value='viewer'
+ localStorage.removeItem('kfd_token')
+ page.value='designer'
+ project.value=null
+ instances.value=[]
+ projects.value=[]
+ users.value=[]
+ backups.value=[]
+ auditEvents.value=[]
+}
+async function loadAll(){
+ if(!token.value)return
+ error.value=''
+ try{
+  // Validate the local application session first, before loading other resources.
+  const me=await api.get('/auth/me')
+  role.value=me.data.role
+  username.value=me.data.username
+
+  const [i,p]=await Promise.all([api.get('/instances'),api.get('/projects')])
+  instances.value=i.data
+  projects.value=p.data
+
+  if(canAdmin.value){
+   const [u,b,a]=await Promise.all([api.get('/users'),api.get('/backups'),api.get('/audit')])
+   users.value=u.data
+   backups.value=b.data
+   auditEvents.value=a.data
+  }else{
+   users.value=[]
+   backups.value=[]
+   auditEvents.value=[]
+  }
+  if(!project.value)newProject()
+ }catch(e:any){
+  console.error('Échec du chargement initial de Keycloak Flow Designer:',e)
+  if(e.response?.status===401){
+   const endpoint=String(e.config?.url||'')
+   let sessionInvalid=/\/auth\/me(?:\?|$)/.test(endpoint)
+
+   // A 401 on another endpoint may come from Keycloak or a downstream operation.
+   // Re-check /auth/me before deciding to sign the user out.
+   if(!sessionInvalid){
+    try{
+     await api.get('/auth/me')
+    }catch(validationError:any){
+     sessionInvalid=validationError.response?.status===401
+    }
+   }
+
+   if(sessionInvalid){
+    logout()
+    error.value='Session invalide ou expirée. Reconnectez-vous.'
+   }else{
+    const detail=e.response?.data?.detail||'Accès refusé par l’API.'
+    error.value=`Une requête a été refusée (${endpoint}) : ${detail}. Votre session reste active.`
+   }
+  }else{
+   const detail=e.response?.data?.detail||e.message||'Erreur inconnue'
+   error.value=`Chargement de l’interface impossible : ${detail}`
+  }
+ }
+}
+function newProject(){project.value={schemaVersion:'1.0',project:{id:createUuid(),name:'Nouveau parcours',description:''},target:{},flow:{alias:'browser-custom',description:'',topLevel:true,providerId:'basic-flow',builtIn:false,nodes:[]}};page.value='designer'}
 async function saved(p:any){project.value=p;await refreshProjects();message('Projet enregistré.')}
 async function refreshProjects(){projects.value=(await api.get('/projects')).data}
 async function refreshBackups(){if(canAdmin.value)backups.value=(await api.get('/backups')).data}
@@ -40,7 +116,7 @@ onMounted(()=>{applyTheme();if(token.value)loadAll()})
   <form class="login-card" @submit.prevent="login"><div class="brand-mark">K</div><div class="eyebrow">OUTIL D’INGÉNIERIE IAM</div><h1>Keycloak Flow Designer</h1><p>Concevoir, importer et déployer des parcours d’authentification.</p><label>Utilisateur<input v-model="username" autocomplete="username" required></label><label>Mot de passe<input v-model="password" type="password" autocomplete="current-password" required></label><button class="primary">Se connecter</button><p v-if="error" class="error">{{error}}</p><button type="button" class="theme-login ghost" @click="dark=!dark;applyTheme()">{{dark?'Passer au thème clair':'Passer au thème sombre'}}</button></form>
  </div>
  <div v-else class="app-shell">
-  <header class="topbar"><div class="brand"><span class="brand-mark small">K</span><b>Keycloak Flow Designer</b><span class="version-tag">1.0.0</span></div><div class="top-actions"><span class="role-tag">{{role}}</span><span class="muted">{{username}}</span><button class="icon-btn" @click="dark=!dark;applyTheme()">{{dark?'☀':'◐'}}</button><button class="ghost" @click="logout">Déconnexion</button></div></header>
+  <header class="topbar"><div class="brand"><span class="brand-mark small">K</span><b>Keycloak Flow Designer</b><span class="version-tag">1.0.3</span></div><div class="top-actions"><span class="role-tag">{{role}}</span><span class="muted">{{username}}</span><button class="icon-btn" @click="dark=!dark;applyTheme()">{{dark?'☀':'◐'}}</button><button class="ghost" @click="logout">Déconnexion</button></div></header>
   <div class="layout"><aside class="sidebar"><div class="nav-title">ESPACE DE TRAVAIL</div><button :class="{active:page==='designer'}" @click="page='designer'">⌘　Designer</button><button :class="{active:page==='projects'}" @click="page='projects'">▤　Projets</button><button :class="{active:page==='instances'}" @click="page='instances'">◎　Instances Keycloak</button><button v-if="canAdmin" :class="{active:page==='backups'}" @click="page='backups';refreshBackups()">▣　Sauvegardes</button><button v-if="canAdmin" :class="{active:page==='audit'}" @click="page='audit';refreshAudit()">≡　Journal d’audit</button><button :class="{active:page==='users'}" @click="page='users'" v-if="canAdmin">♙　Utilisateurs</button><button :class="{active:page==='settings'}" @click="page='settings'">⚙　Compte</button><div class="sidebar-bottom"><span class="status-dot"></span> Persistance JSON active</div></aside>
    <main class="main">
     <div v-if="info" class="notice success-notice">{{info}}</div><div v-if="error" class="notice error-notice">{{error}}<button class="tiny" @click="error=''">×</button></div>
