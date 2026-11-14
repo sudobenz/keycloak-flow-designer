@@ -1,0 +1,36 @@
+services:
+  backend:
+    build: ./backend
+    container_name: flow-designer-backend
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - designer_data:/app/data
+    expose:
+      - "8000"
+    networks: [designer]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: /api
+    container_name: flow-designer-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [designer]
+
+volumes:
+  designer_data:
+
+networks:
+  designer:
