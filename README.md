@@ -1,67 +1,26 @@
-# Keycloak Flow Designer
+# État de validation de la livraison 1.0.0
 
-Application web autonome de conception de workflows d'authentification Keycloak.
+## Contrôles exécutés dans l'environnement de génération
 
-## État du livrable
+- Backend : `pytest -q` — 17 tests réussis.
+- Python : `python -m compileall -q app tests` — réussi.
+- Scripts TypeScript : transpilation syntaxique des blocs `<script setup>` et des fichiers `.ts` — réussie.
+- Script Linux `scripts/init-env.sh` : testé dans un répertoire temporaire ; génération de `.env`, remplacement des placeholders et permissions `0600` — réussi.
+- Génération des clés Fernet basée uniquement sur la bibliothèque standard Python — vérifiée.
+- Protection des paramètres providers marqués `secret`, y compris dans les snapshots de flows imbriqués — testée.
+- Historique de projets et restauration administrateur — test API réussi.
+- Liste et export JSON des snapshots de déploiement — test API réussi.
+- Endpoint d’audit protégé par le rôle administrateur ; affichage du journal dans l’interface.
+- Modèles Browser de base et Kerberos/OTP conditionnel — validation structurelle des exemples réussie.
+- Garde-fou de mise à jour : la provenance du flow importé doit correspondre à la cible sur la même instance/Realm — test réussi.
 
-Cette archive contient un socle exécutable : interface Vue 3/Vue Flow, API FastAPI, authentification locale, stockage JSON, gestion des instances Keycloak, découverte des realms/flows et modèle de projet indépendant de Keycloak.
+## Contrôles non exécutés
 
-Le déploiement distant des flows est volontairement protégé : l'API propose la connexion et la lecture, mais le moteur de déploiement complet (création ordonnée, configuration SPI, diff transactionnel et restauration) doit être validé sur des versions Keycloak réelles avant activation. Il n'est pas présenté comme opérationnel dans cette première livraison.
+- Installation npm et compilation complète Vue/Vite : non exécutées. `npm install` a expiré dans l'environnement de génération ; aucun `node_modules` n'est inclus dans l'archive.
+- Build Docker Compose : non exécuté car le moteur Docker/Podman n'est pas installé dans l'environnement de génération.
+- Script Windows PowerShell : non exécuté, aucun interpréteur PowerShell n'est disponible.
+- Intégration réelle à un serveur Keycloak : non exécutée. Les routes et payloads s'appuient sur l'Admin REST API documentée, mais chaque version cible et chaque SPI tiers doivent être qualifiés sur un Realm de recette.
 
-## Démarrage
+## Conséquence
 
-```bash
-cp .env.example .env
-# Générer deux secrets distincts :
-python -c "import secrets; print(secrets.token_urlsafe(48))"
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# Reporter le premier dans SECRET_KEY et le second dans ENCRYPTION_KEY.
-# Définir également INITIAL_ADMIN_PASSWORD.
-docker compose up -d --build
-```
-
-Interface : http://localhost:8080  
-API : http://localhost:8000/docs
-
-Identifiant initial : `admin`  
-Mot de passe : valeur de `INITIAL_ADMIN_PASSWORD` dans `.env`.
-
-Changez le mot de passe dès la première connexion. L'application est prévue pour être placée derrière HTTPS en production.
-
-## Architecture
-
-- `frontend/` : Vue 3, TypeScript, Vue Flow, Pinia.
-- `backend/` : FastAPI, Pydantic, adaptateur REST Keycloak.
-- `data/` : projets, instances et données locales persistées dans un volume Docker.
-
-## Limites à connaître
-
-- L'authentification locale est une authentification applicative minimale. Pour une exposition en production, ajouter limitation de tentatives, politique de mots de passe, rotation et sauvegarde de la clé de chiffrement.
-- Les secrets des instances sont chiffrés avec Fernet. `ENCRYPTION_KEY` doit être sauvegardée hors du conteneur : sa perte rend les secrets enregistrés illisibles.
-- La découverte des providers dépend des endpoints et métadonnées exposés par la version et les extensions installées.
-- Le modèle de graphe conserve une structure hiérarchique. Les arêtes graphiques servent à la visualisation ; elles ne définissent pas une logique de branchement arbitraire dans Keycloak.
-- Les endpoints d'administration Keycloak varient selon les capacités disponibles. Tester chaque version ciblée dans une matrice d'intégration avant déploiement en production.
-
-## Développement local
-
-Backend :
-```bash
-cd backend
-python -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-Frontend :
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Configurer `VITE_API_URL=http://localhost:8000` dans `frontend/.env.local`.
-
-## Sauvegarde
-
-Sauvegarder le volume `designer_data` et conserver séparément les valeurs `SECRET_KEY` et `ENCRYPTION_KEY`.
+Le livrable contient le code source, les conteneurs, les scripts, les tests backend et la documentation. Il ne doit pas être considéré comme certifié en production tant que les contrôles non exécutés n'ont pas été passés dans l'environnement cible. Commencer par un déploiement de laboratoire et un Realm non critique.
