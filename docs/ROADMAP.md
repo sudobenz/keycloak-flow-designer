@@ -1,25 +1,22 @@
-# Roadmap
+# État de la livraison
 
-## Livraison actuelle (socle 0.1)
-- Interface française, thèmes clair/sombre.
-- Authentification locale.
-- Canvas Vue Flow et arborescence simplifiée.
-- Catalogue de composants de départ et découverte distante best-effort.
-- Projets JSON et validation structurelle.
-- Connexion Keycloak par client_credentials.
-- Lecture des realms, flows et exécutions.
+## 1.0.0
 
-## Prochaine étape obligatoire
-- Modèle hiérarchique complet avec édition imbriquée des sous-flux.
-- Import fidèle d'un flow Keycloak existant.
-- Découverte/versioning des métadonnées de providers.
-- Gestion de configuration par formulaire dynamique.
-- Tests d'intégration Keycloak par version.
+- Import récursif des flows et sous-flows.
+- Découverte des authenticator providers et configurations.
+- Canvas et arborescence.
+- Ajout/suppression/réordonnancement de composants.
+- Configuration dynamique et JSON avancé.
+- Comptes locaux et rôles.
+- Gestion des instances, export/import projets, validation.
+- Déploiement de flows personnalisés et mise à jour avec snapshot/compensation best-effort.
 
-## Avant production
-- Diff sémantique et plan de déploiement.
-- Déploiement idempotent.
-- Snapshot et compensation.
-- Audit détaillé.
-- RBAC local et gestion de comptes.
-- Durcissement sécurité et tests de charge.
+## Vérifications d'acceptation encore requises côté environnement
+
+- Build Docker dans l'environnement cible.
+- Tests sur chaque version Keycloak réellement supportée.
+- Tests avec SPI tiers réellement installés.
+- Scénarios de rollback interrompu, réseau indisponible et perte de permissions.
+- Test d'authentification réel avec client OIDC après modification du flow.
+
+Aucune compatibilité multi-version n'est certifiée par le seul fait d'utiliser des endpoints REST communs : la matrice doit être exécutée contre chaque build supporté.

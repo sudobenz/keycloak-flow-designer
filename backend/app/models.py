@@ -1,5 +1,4 @@
-from pydantic import BaseModel, Field, HttpUrl
-from typing import Any, Literal
+from pydantic import BaseModel, Field
 
 class LoginInput(BaseModel):
     username: str
@@ -12,8 +11,3 @@ class InstanceInput(BaseModel):
     client_id: str
     client_secret: str
     verify_tls: bool = True
-
-class ProjectInput(BaseModel):
-    project: dict[str, Any]
-    flow: dict[str, Any]
-    schemaVersion: str = "1.0"
