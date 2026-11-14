@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "1.0",
+  "project": {
+    "id": "browser-basic-template",
+    "name": "Browser — mot de passe",
+    "description": "Modèle de départ"
+  },
+  "target": {},
+  "flow": {
+    "alias": "browser-custom",
+    "description": "Browser flow — cookie et formulaire",
+    "topLevel": true,
+    "providerId": "basic-flow",
+    "builtIn": false,
+    "nodes": [
+      {
+        "nodeId": "tpl-cookie",
+        "type": "execution",
+        "displayName": "Cookie",
+        "providerId": "auth-cookie",
+        "requirement": "ALTERNATIVE",
+        "requirementChoices": [
+          "REQUIRED",
+          "ALTERNATIVE",
+          "DISABLED"
+        ],
+        "priority": 10,
+        "config": {},
+        "position": {
+          "x": 60,
+          "y": 80
+        }
+      },
+      {
+        "nodeId": "tpl-forms",
+        "type": "subflow",
+        "displayName": "Forms",
+        "providerId": "basic-flow",
+        "alias": "forms-custom",
+        "flowType": "form",
+        "requirement": "ALTERNATIVE",
+        "requirementChoices": [
+          "REQUIRED",
+          "ALTERNATIVE",
+          "CONDITIONAL",
+          "DISABLED"
+        ],
+        "priority": 20,
+        "description": "Authentification par formulaire",
+        "children": [
+          {
+            "nodeId": "tpl-password",
+            "type": "execution",
+            "displayName": "Username Password Form",
+            "providerId": "auth-username-password-form",
+            "requirement": "REQUIRED",
+            "requirementChoices": [
+              "REQUIRED",
+              "ALTERNATIVE",
+              "DISABLED"
+            ],
+            "priority": 10,
+            "config": {},
+            "position": {
+              "x": 270,
+              "y": 170
+            }
+          }
+        ],
+        "position": {
+          "x": 250,
+          "y": 100
+        }
+      }
+    ]
+  }
+}

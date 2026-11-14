@@ -1,0 +1,39 @@
+--- a/frontend/src/components/Designer.vue
++++ b/frontend/src/components/Designer.vue
+@@ -31,7 +31,35 @@
+ function addSubflow(){addNode({id:'basic-flow',displayName:'Nouveau sous-flux'},'subflow')}
+ function deleteNode(id:string){if(!confirm('Supprimer cet élément et ses enfants du projet local ?'))return;const p=clone();function remove(nodes:any[]):boolean{const i=nodes.findIndex(n=>n.nodeId===id);if(i>=0){nodes.splice(i,1);return true}return nodes.some(n=>remove(n.children||[]))}remove(p.flow.nodes);emitProject(p);selectedId.value=null}
+ function reorder(delta:number){if(!selected.value)return;const p=clone();function visit(nodes:any[]):boolean{const i=nodes.findIndex(n=>n.nodeId===selectedId.value);if(i>=0){const j=i+delta;if(j<0||j>=nodes.length)return true;[nodes[i],nodes[j]]=[nodes[j],nodes[i]];nodes.forEach((n,k)=>n.priority=(k+1)*10);return true}return nodes.some(n=>visit(n.children||[]))}visit(p.flow.nodes);emitProject(p)}
+-function dropTree(targetId:string){const sourceId=draggedId.value;draggedId.value=null;if(!sourceId||sourceId===targetId)return;const p=clone();let sourceList:any[]|null=null,targetList:any[]|null=null;function locate(list:any[]){if(list.some(n=>n.nodeId===sourceId))sourceList=list;if(list.some(n=>n.nodeId===targetId))targetList=list;for(const n of list)if(n.type==='subflow')locate(n.children||[])}locate(p.flow.nodes);if(!sourceList||sourceList!==targetList){emit('error','Le déplacement entre niveaux hiérarchiques n’est pas autorisé. Réorganisez les éléments au sein du même sous-flux.');return}const from=sourceList.findIndex(n=>n.nodeId===sourceId),to=sourceList.findIndex(n=>n.nodeId===targetId);const [moved]=sourceList.splice(from,1);sourceList.splice(to,0,moved);sourceList.forEach((n,k)=>n.priority=(k+1)*10);emitProject(p)}
++function dropTree(targetId:string){
++ const sourceId=draggedId.value
++ draggedId.value=null
++ if(!sourceId||sourceId===targetId)return
++ const p=clone()
++ function findContainingList(list:any[],id:string):any[]|null{
++  if(list.some((node:any)=>node.nodeId===id))return list
++  for(const node of list){
++   if(node.type==='subflow'){
++    const found=findContainingList(node.children||[],id)
++    if(found)return found
++   }
++  }
++  return null
++ }
++ const sourceList:any[]|null=findContainingList(p.flow.nodes,sourceId)
++ const targetList:any[]|null=findContainingList(p.flow.nodes,targetId)
++ if(!sourceList||!targetList||sourceList!==targetList){
++  emit('error','Le déplacement entre niveaux hiérarchiques n’est pas autorisé. Réorganisez les éléments au sein du même sous-flux.')
++  return
++ }
++ const from=sourceList.findIndex((node:any)=>node.nodeId===sourceId)
++ const to=sourceList.findIndex((node:any)=>node.nodeId===targetId)
++ if(from<0||to<0)return
++ const [moved]=sourceList.splice(from,1)
++ sourceList.splice(to,0,moved)
++ sourceList.forEach((node:any,index:number)=>node.priority=(index+1)*10)
++ emitProject(p)
++}
+ function onNodeDragStop({node}:any){updateNode(node.id,n=>n.position=node.position)}
+ function onNodeClick({node}:any){chooseNode(node.id)}
+ async function loadRealms(preferred=''){if(!instanceId.value)return;try{realms.value=(await api.get(`/instances/${instanceId.value}/realms`)).data;realm.value=realms.value.some((r:any)=>r.realm===preferred)?preferred:(realms.value[0]?.realm||'')}catch(e:any){emit('error',e.response?.data?.detail||'Lecture des Realms impossible.')}}
