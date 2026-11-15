@@ -5,6 +5,16 @@
 
 Éditeur web autonome pour concevoir, importer, valider et déployer des Authentication Flows Keycloak.
 
+⚠️ Attention — Projet expérimental
+
+Ce projet est actuellement en phase de développement et de test.
+
+Il n'est pas validé pour une utilisation en production.
+
+Certaines fonctionnalités peuvent présenter des bugs, des limitations ou des comportements inattendus. Toute utilisation doit être réalisée dans un environnement de test, avec une instance Keycloak de laboratoire.
+
+L'utilisation sur une infrastructure réelle se fait sous votre entière responsabilité.
+
 ## Corrections 1.0.1 à 1.0.6
 
 - Correction du typage TypeScript dans le déplacement des nœuds de l’arborescence.
