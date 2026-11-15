@@ -1,10 +1,13 @@
-# Keycloak Flow Designer — 1.0.1
+# Keycloak Flow Designer — 1.0.5
 
 Éditeur web autonome pour concevoir, importer, valider et déployer des Authentication Flows Keycloak.
 
-## Correctif 1.0.1
+## Corrections 1.0.1 à 1.0.5
 
-- Correction du typage TypeScript dans le déplacement des nœuds de l’arborescence : la recherche retourne explicitement la liste parente, au lieu de muter des variables capturées dans une fermeture.
+- Correction du typage TypeScript dans le déplacement des nœuds de l’arborescence.
+- En 1.0.3, la gestion de session ne supprime plus le jeton sur tous les HTTP 401.
+- En 1.0.4, les opérations Valider et Export utilisent l’identifiant renvoyé après la sauvegarde et s’arrêtent si celle-ci échoue.
+- En 1.0.5, le canvas dispose de contrôles d’ajout directs, d’un catalogue local de composants utilisable hors connexion, d’une recherche et d’un ajout de Provider ID personnalisé.
 
 ## Fonctions livrées
 
@@ -16,7 +19,7 @@
 - Découverte des Realms, flows, authenticator providers et descriptions de configuration.
 - Import récursif des flows et sous-flows dans le modèle JSON.
 - Duplication des flows natifs Keycloak vers un flow personnalisé.
-- Ajout d'exécutions et de sous-flux, exigences, ordre, configuration JSON et formulaires générés à partir des descriptions de providers.
+- Ajout d'exécutions et de sous-flux depuis le catalogue local ou dynamique, recherche de providers, ajout manuel d’un Provider ID personnalisé, exigences, ordre, configuration JSON et formulaires générés à partir des descriptions de providers.
 - Validation, prévisualisation, sauvegarde de snapshot, déploiement REST et tentative de compensation en cas d'échec.
 - Historique versionné des projets (50 versions conservées par projet) avec restauration réservée à l’administrateur ; journaux d’audit locaux.
 

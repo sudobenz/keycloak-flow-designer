@@ -12,6 +12,22 @@ const emit=defineEmits(['update:modelValue','saved','message','error'])
 const selectedId=ref<string|null>(null), treeExpanded=ref(true), showCatalog=ref(true), draggedId=ref<string|null>(null)
 const instanceId=ref(props.modelValue.target?.instanceId||''), realm=ref(props.modelValue.target?.realm||''), realms=ref<any[]>([]), flows=ref<any[]>([])
 const catalog=ref<any[]>([]), catalogSource=ref('')
+// Catalogue de base utilisable sans connexion à Keycloak. Il permet de construire
+// un workflow local avant de sélectionner une instance cible.
+const localCatalog=[
+ {id:'auth-cookie',displayName:'Cookie — session existante',category:'Session',defaultRequirement:'ALTERNATIVE'},
+ {id:'auth-spnego',displayName:'Kerberos / SPNEGO',category:'Authentification',defaultRequirement:'ALTERNATIVE'},
+ {id:'auth-username-password-form',displayName:'Formulaire identifiant / mot de passe',category:'Authentification',defaultRequirement:'REQUIRED'},
+ {id:'auth-otp-form',displayName:'Formulaire OTP',category:'MFA',defaultRequirement:'REQUIRED'},
+ {id:'webauthn-authenticator',displayName:'WebAuthn',category:'MFA',defaultRequirement:'ALTERNATIVE'},
+ {id:'auth-x509-client-username-form',displayName:'Certificat client X.509',category:'Authentification',defaultRequirement:'ALTERNATIVE'},
+ {id:'identity-provider-redirector',displayName:'Redirection vers un fournisseur d’identité',category:'Fédération',defaultRequirement:'ALTERNATIVE'},
+ {id:'idp-review-profile',displayName:'Vérification du profil fournisseur d’identité',category:'Fédération',defaultRequirement:'REQUIRED'},
+ {id:'conditional-user-configured',displayName:'Condition — utilisateur configuré',category:'Conditions',defaultRequirement:'REQUIRED'},
+ {id:'auth-recovery-authn-code-form',displayName:'Formulaire de codes de récupération',category:'MFA',defaultRequirement:'ALTERNATIVE'}
+]
+const catalogSearch=ref(''), quickProviderId=ref('auth-cookie')
+const customProviderOpen=ref(false), customProviderId=ref(''), customProviderName=ref('')
 const importAlias=ref(''), deployMode=ref('create'), deployAlias=ref(props.modelValue.flow.alias||''), allowDeletes=ref(false)
 const validation=ref<any>(null), deploymentPreview=ref<any>(null), confirmValue=ref(''), deployOpen=ref(false)
 const jsonConfig=ref('{}'), propertySchemas=ref<any[]>([]), templateSelection=ref('')
@@ -25,11 +41,42 @@ function walk(nodes:any[],depth=0,parent='root',rows:any[]=[]){for(const n of no
 const treeRows=computed(()=>walk(props.modelValue.flow.nodes||[]))
 const nodes=computed<Node[]>(()=>{const rows=treeRows.value;return rows.map((n:any,i:number)=>({id:n.nodeId,position:n.position||{x:45+n.depth*210,y:55+(i%6)*110+Math.floor(i/6)*30},data:{label:n.displayName||n.providerId||'Composant',detail:`${n.type==='subflow'?'Sous-flux':n.providerId} · ${n.requirement}`,type:n.type},type:'default',class:n.type==='subflow'?'subflow-node':'execution-node'}))})
 const edges=computed<Edge[]>(()=>{const result:Edge[]=[];const connectSiblings=(list:any[])=>{for(let i=0;i<list.length-1;i++)result.push({id:`edge-${list[i].nodeId}-${list[i+1].nodeId}`,source:list[i].nodeId,target:list[i+1].nodeId,animated:false});for(const n of list)if(n.type==='subflow')connectSiblings(n.children||[])};connectSiblings(props.modelValue.flow.nodes||[]);return result})
+const catalogEntries=computed(()=>{
+ const merged=new Map<string,any>()
+ for(const provider of localCatalog)merged.set(provider.id,{...provider})
+ for(const provider of catalog.value){
+  const id=String(provider.id||provider.providerId||'').trim()
+  if(!id)continue
+  const previous=merged.get(id)||{}
+  merged.set(id,{...previous,...provider,id,displayName:provider.displayName||provider.name||previous.displayName||id})
+ }
+ return [...merged.values()].sort((a,b)=>String(a.displayName).localeCompare(String(b.displayName),'fr'))
+})
+const filteredCatalog=computed(()=>{
+ const q=catalogSearch.value.trim().toLocaleLowerCase('fr')
+ return q?catalogEntries.value.filter((p:any)=>`${p.displayName} ${p.id} ${p.category||''}`.toLocaleLowerCase('fr').includes(q)):catalogEntries.value
+})
+const quickProviderLabel=computed(()=>catalogEntries.value.find((p:any)=>p.id===quickProviderId.value)?.displayName||'un composant')
 const requirementChoices=computed(()=>selected.value?.requirementChoices?.length?selected.value.requirementChoices:(selected.value?.type==='subflow'?['REQUIRED','ALTERNATIVE','CONDITIONAL','DISABLED']:['REQUIRED','ALTERNATIVE','DISABLED']))
 function updateNode(id:string,mutator:(n:any)=>void){const p=clone();function visit(nodes:any[]):boolean{for(const n of nodes){if(n.nodeId===id){mutator(n);return true}if(visit(n.children||[]))return true}return false}visit(p.flow.nodes);emitProject(p)}
 function chooseNode(id:string){selectedId.value=id;if(findNode(props.modelValue.flow.nodes,id)?.config)jsonConfig.value=JSON.stringify(findNode(props.modelValue.flow.nodes,id).config,null,2);loadConfigSchema()}
-function addNode(provider:any,type='execution'){const p=clone();const choices=provider.requirementChoices?.length?provider.requirementChoices:(type==='subflow'?['REQUIRED','ALTERNATIVE','CONDITIONAL','DISABLED']:['REQUIRED','ALTERNATIVE','DISABLED']);const n={nodeId:createUuid(),type,displayName:provider.displayName||provider.name||provider.id,providerId:provider.id,requirement:'REQUIRED',requirementChoices:choices,priority:10,config:{},configAlias:'',position:{x:80,y:80},...(type==='subflow'?{alias:'',description:'',flowType:'basic',children:[]}: {})};let target=p.flow.nodes;function findContainingList(nodes:any[],id:string|null):any[]|null{if(!id)return null;if(nodes.some(x=>x.nodeId===id))return nodes;for(const item of nodes){if(item.type==='subflow'){const found=findContainingList(item.children||[],id);if(found)return found}}return null}const currentSelected=findNode(p.flow.nodes,selectedId.value);if(currentSelected?.type==='subflow')target=currentSelected.children||(currentSelected.children=[]);else if(selectedId.value)target=findContainingList(p.flow.nodes,selectedId.value)||p.flow.nodes;n.priority=(target.length+1)*10;n.position={x:80+(target.length%3)*40,y:80+target.length*80};target.push(n);emitProject(p);selectedId.value=n.nodeId;jsonConfig.value='{}';propertySchemas.value=[];loadConfigSchema()}
+function addNode(provider:any,type='execution'){const p=clone();const choices=provider.requirementChoices?.length?provider.requirementChoices:(type==='subflow'?['REQUIRED','ALTERNATIVE','CONDITIONAL','DISABLED']:['REQUIRED','ALTERNATIVE','DISABLED']);const n={nodeId:createUuid(),type,displayName:provider.displayName||provider.name||provider.id,providerId:provider.id,requirement:provider.defaultRequirement||'REQUIRED',requirementChoices:choices,priority:10,config:{},configAlias:'',position:{x:80,y:80},...(type==='subflow'?{alias:'',description:'',flowType:'basic',children:[]}: {})};let target=p.flow.nodes;function findContainingList(nodes:any[],id:string|null):any[]|null{if(!id)return null;if(nodes.some(x=>x.nodeId===id))return nodes;for(const item of nodes){if(item.type==='subflow'){const found=findContainingList(item.children||[],id);if(found)return found}}return null}const currentSelected=findNode(p.flow.nodes,selectedId.value);if(currentSelected?.type==='subflow')target=currentSelected.children||(currentSelected.children=[]);else if(selectedId.value)target=findContainingList(p.flow.nodes,selectedId.value)||p.flow.nodes;n.priority=(target.length+1)*10;n.position={x:80+(target.length%3)*40,y:80+target.length*80};target.push(n);emitProject(p);selectedId.value=n.nodeId;jsonConfig.value='{}';propertySchemas.value=[];loadConfigSchema()}
 function addSubflow(){addNode({id:'basic-flow',displayName:'Nouveau sous-flux'},'subflow')}
+function addQuickProvider(){
+ const provider=catalogEntries.value.find((item:any)=>item.id===quickProviderId.value)||catalogEntries.value[0]
+ if(provider)addNode(provider)
+}
+function createCustomProvider(){
+ const id=customProviderId.value.trim()
+ const displayName=customProviderName.value.trim()||id
+ if(!id){emit('error','Le Provider ID est obligatoire.');return}
+ if(!/^[A-Za-z0-9._:-]+$/.test(id)){emit('error','Le Provider ID contient des caractères non autorisés.');return}
+ addNode({id,displayName,requirementChoices:['REQUIRED','ALTERNATIVE','DISABLED']})
+ customProviderOpen.value=false
+ customProviderId.value=''
+ customProviderName.value=''
+ emit('message',`Composant personnalisé « ${displayName} » ajouté. Vérifier que le Provider ID existe sur la version Keycloak cible.`)
+}
 function deleteNode(id:string){if(!confirm('Supprimer cet élément et ses enfants du projet local ?'))return;const p=clone();function remove(nodes:any[]):boolean{const i=nodes.findIndex(n=>n.nodeId===id);if(i>=0){nodes.splice(i,1);return true}return nodes.some(n=>remove(n.children||[]))}remove(p.flow.nodes);emitProject(p);selectedId.value=null}
 function reorder(delta:number){if(!selected.value)return;const p=clone();function visit(nodes:any[]):boolean{const i=nodes.findIndex(n=>n.nodeId===selectedId.value);if(i>=0){const j=i+delta;if(j<0||j>=nodes.length)return true;[nodes[i],nodes[j]]=[nodes[j],nodes[i]];nodes.forEach((n,k)=>n.priority=(k+1)*10);return true}return nodes.some(n=>visit(n.children||[]))}visit(p.flow.nodes);emitProject(p)}
 function dropTree(targetId:string){
@@ -71,12 +118,75 @@ watch(()=>props.modelValue.project?.id,()=>{selectedId.value=null;deployAlias.va
 watch(()=>selected.value?.config,(cfg)=>{jsonConfig.value=JSON.stringify(cfg||{},null,2)},{deep:true})
 async function importSelected(){if(!importAlias.value)return;try{const p=(await api.get(`/instances/${instanceId.value}/realms/${encodeURIComponent(realm.value)}/flows/${encodeURIComponent(importAlias.value)}/import`)).data;emitProject(p);selectedId.value=null;deployAlias.value=p.flow.alias;emit('message',`Flow « ${p.flow.alias} » importé dans le projet.`)}catch(e:any){emit('error',e.response?.data?.detail||'Import du flow impossible.')}}
 async function duplicateSelected(){if(!importAlias.value)return;const newAlias=prompt('Alias du nouveau flow personnalisé');if(!newAlias)return;try{const p=(await api.post(`/instances/${instanceId.value}/realms/${encodeURIComponent(realm.value)}/flows/${encodeURIComponent(importAlias.value)}/duplicate`,{newAlias})).data;emitProject(p);deployAlias.value=newAlias;emit('message',`Flow dupliqué sous « ${newAlias} ».`);await loadRemoteData()}catch(e:any){emit('error',e.response?.data?.detail||'Duplication impossible.')}}
-async function save(){try{const p=clone();p.target={...(p.target||{}),...(instanceId.value?{instanceId:instanceId.value}:{}),...(realm.value?{realm:realm.value}: {})};const r=(await api.post('/projects',p)).data;emitProject(r);emit('saved',r)}catch(e:any){emit('error',e.response?.data?.detail||'Sauvegarde impossible.')}}
-async function validate(){await save();try{validation.value=(await api.post(`/projects/${props.modelValue.project.id}/validate`)).data}catch(e:any){emit('error',e.response?.data?.detail||'Validation impossible.')}}
-async function openDeploy(){if(!canDeploy.value){emit('error','Le déploiement exige un rôle administrateur et une instance/Realm sélectionnés.');return}await save();try{const p=await api.post(`/projects/${props.modelValue.project.id}/deploy/preview`,{instanceId:instanceId.value,realm:realm.value,mode:deployMode.value,alias:deployAlias.value,allowDeletes:allowDeletes.value,confirmation:deployAlias.value});deploymentPreview.value=p.data;confirmValue.value='';deployOpen.value=true}catch(e:any){emit('error',e.response?.data?.detail||'Prévisualisation impossible.')}}
-async function confirmDeploy(){try{const result=(await api.post(`/projects/${props.modelValue.project.id}/deploy`,{instanceId:instanceId.value,realm:realm.value,mode:deployMode.value,alias:deployAlias.value,allowDeletes:allowDeletes.value,confirmation:confirmValue.value})).data;deployOpen.value=false;if(result.updatedProject){emitProject(result.updatedProject);await api.post('/projects',result.updatedProject)}emit('message',result.message||'Déploiement terminé.');await loadRemoteData()}catch(e:any){emit('error',e.response?.data?.detail||'Déploiement échoué.')}}
-async function exportProject(){await save();const response=await api.get(`/projects/${props.modelValue.project.id}/export.json`,{responseType:'blob'});downloadBlob(response.data,`${props.modelValue.project.name||'flow'}.json`,'application/json')}
-async function exportYaml(){await save();const response=await api.get(`/projects/${props.modelValue.project.id}/export.yaml`,{responseType:'blob'});downloadBlob(response.data,`${props.modelValue.project.name||'flow'}.yaml`,'application/yaml')}
+function errorDetail(error:any, fallback:string){
+ return error?.response?.data?.detail || error?.message || fallback
+}
+
+// Persiste le modèle et retourne toujours l'objet réellement enregistré par l'API.
+// Les opérations qui dépendent d'un projet enregistré utilisent cet objet et son ID,
+// plutôt que de relire immédiatement la prop v-model (mise à jour asynchrone).
+async function persistProject(){
+ const payload=clone()
+ payload.target={...(payload.target||{}),...(instanceId.value?{instanceId:instanceId.value}:{}),...(realm.value?{realm:realm.value}:{})}
+ const response=await api.post('/projects',payload)
+ const saved=response.data
+ if(!saved?.project?.id)throw new Error('Le serveur n’a pas retourné d’identifiant de projet après l’enregistrement.')
+ emitProject(saved)
+ emit('saved',saved)
+ return saved
+}
+
+async function save(){
+ try{await persistProject()}
+ catch(e:any){emit('error',errorDetail(e,'Sauvegarde impossible.'))}
+}
+
+async function validate(){
+ try{
+  const saved=await persistProject()
+  const id=encodeURIComponent(saved.project.id)
+  validation.value=(await api.post(`/projects/${id}/validate`)).data
+ }catch(e:any){emit('error',errorDetail(e,'Validation impossible.'))}
+}
+
+async function openDeploy(){
+ if(!canDeploy.value){emit('error','Le déploiement exige un rôle administrateur et une instance/Realm sélectionnés.');return}
+ try{
+  const saved=await persistProject()
+  const id=encodeURIComponent(saved.project.id)
+  const response=await api.post(`/projects/${id}/deploy/preview`,{instanceId:instanceId.value,realm:realm.value,mode:deployMode.value,alias:deployAlias.value,allowDeletes:allowDeletes.value,confirmation:deployAlias.value})
+  deploymentPreview.value=response.data
+  confirmValue.value=''
+  deployOpen.value=true
+ }catch(e:any){emit('error',errorDetail(e,'Prévisualisation impossible.'))}
+}
+
+async function confirmDeploy(){
+ try{
+  const id=encodeURIComponent(props.modelValue.project.id)
+  const result=(await api.post(`/projects/${id}/deploy`,{instanceId:instanceId.value,realm:realm.value,mode:deployMode.value,alias:deployAlias.value,allowDeletes:allowDeletes.value,confirmation:confirmValue.value})).data
+  deployOpen.value=false
+  if(result.updatedProject){emitProject(result.updatedProject);await api.post('/projects',result.updatedProject)}
+  emit('message',result.message||'Déploiement terminé.')
+  await loadRemoteData()
+ }catch(e:any){emit('error',errorDetail(e,'Déploiement échoué.'))}
+}
+
+async function exportProject(){
+ try{
+  const saved=await persistProject()
+  const response=await api.get(`/projects/${encodeURIComponent(saved.project.id)}/export.json`,{responseType:'blob'})
+  downloadBlob(response.data,`${saved.project.name||'flow'}.json`,'application/json')
+ }catch(e:any){emit('error',errorDetail(e,'Export JSON impossible.'))}
+}
+
+async function exportYaml(){
+ try{
+  const saved=await persistProject()
+  const response=await api.get(`/projects/${encodeURIComponent(saved.project.id)}/export.yaml`,{responseType:'blob'})
+  downloadBlob(response.data,`${saved.project.name||'flow'}.yaml`,'application/yaml')
+ }catch(e:any){emit('error',errorDetail(e,'Export YAML impossible.'))}
+}
 async function importFile(event:any){const file=event.target.files?.[0];if(!file)return;const form=new FormData();form.append('file',file);try{const p=(await api.post('/projects/import',form,{headers:{'Content-Type':'multipart/form-data'}})).data;emitProject(p);emit('message','Projet JSON importé.')}catch(e:any){emit('error',e.response?.data?.detail||'Import JSON impossible.')}event.target.value=''}
 function downloadBlob(blob:Blob,name:string,type:string){const url=URL.createObjectURL(new Blob([blob],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 async function loadConfigSchema(){if(selected.value?.type!=='execution'||!selected.value?.providerId||!instanceId.value||!realm.value){propertySchemas.value=[];return}const selectedIdAtStart=selected.value.nodeId;try{const r=await api.get(`/instances/${instanceId.value}/realms/${encodeURIComponent(realm.value)}/catalog`);const p=(r.data.providers||[]).find((x:any)=>(x.id||x.providerId)===selected.value?.providerId);propertySchemas.value=p?.configDescription?.properties||[];const secretKeys=propertySchemas.value.filter((x:any)=>x.name&&(x.secret===true||String(x.secret).toLowerCase()==='true')).map((x:any)=>x.name);updateNode(selectedIdAtStart,n=>n.secretConfigKeys=secretKeys)}catch{propertySchemas.value=[]}}
@@ -87,12 +197,13 @@ function saveRawConfig(){try{const value=JSON.parse(jsonConfig.value);if(!value|
  <div class="designer-meta panel"><div class="meta-field"><label>Instance Keycloak<select v-model="instanceId"><option value="">Mode hors ligne</option><option v-for="i in instances" :key="i.id" :value="i.id">{{i.name}}</option></select></label></div><div class="meta-field"><label>Realm<select v-model="realm" :disabled="!instanceId"><option value="">Sélectionner</option><option v-for="r in realms" :key="r.realm" :value="r.realm">{{r.realm}}</option></select></label></div><div class="meta-field import-field"><label>Importer un flow existant<select v-model="importAlias" :disabled="!realm"><option value="">Choisir un flow</option><option v-for="f in flows" :key="f.id" :value="f.alias">{{f.alias}}{{f.builtIn?' (natif)':''}}</option></select></label><div class="inline-actions"><button class="ghost" :disabled="!importAlias" @click="importSelected">Importer</button><button class="ghost" :disabled="!importAlias" @click="duplicateSelected">Dupliquer</button></div></div></div>
  <div class="project-fields panel"><label>Nom du projet<input :value="modelValue.project.name" @change="emitProject({...clone(),project:{...modelValue.project,name:($event.target as HTMLInputElement).value}})"></label><label>Alias Keycloak<input v-model="modelValue.flow.alias" @change="deployAlias=modelValue.flow.alias"></label><label>Description<input v-model="modelValue.flow.description"></label></div>
  <div class="designer-layout">
-  <aside class="catalog panel"><div class="panel-title"><b>Composants</b><button class="tiny" @click="showCatalog=!showCatalog">{{showCatalog?'−':'+'}}</button></div><template v-if="showCatalog"><label class="template-picker">Modèles de départ<select v-model="templateSelection" @change="applyTemplate(templateSelection)"><option value="">Choisir un modèle…</option><option v-for="t in flowTemplates" :key="t.id" :value="t.id">{{t.label}}</option></select></label><div class="catalog-section">AUTHENTICATORS</div><p class="hint">{{catalog.length?`Catalogue ${catalogSource==='keycloak'?'dynamique Keycloak':'initial'}`:'Sélectionner une instance et un Realm pour découvrir les providers.'}}</p><button v-for="c in catalog" :key="c.id" class="catalog-item" @click="addNode(c)"><span class="node-icon">◇</span><span><b>{{c.displayName}}</b><small>{{c.id}}</small></span><span class="plus">+</span></button><button class="catalog-item" @click="addSubflow"><span class="node-icon">▱</span><span><b>Sous-flux</b><small>Basic ou Form</small></span><span class="plus">+</span></button><label class="file-import">Importer un projet JSON<input type="file" accept="application/json,.json" @change="importFile"></label></template></aside>
-  <section class="canvas-wrap"><div class="canvas-toolbar"><div><b>{{modelValue.flow.alias}}</b><span class="muted"> · {{treeRows.length}} composants</span><span v-if="modelValue.flow.builtIn" class="warning-tag">Flow natif</span></div><div class="toolbar-actions"><button class="ghost" @click="validate">Valider</button><button class="ghost" @click="exportProject">JSON</button><button class="ghost" @click="exportYaml">YAML</button><button class="primary" @click="save">Enregistrer</button></div></div><VueFlow :nodes="nodes" :edges="edges" fit-view-on-init @node-click="onNodeClick" @node-drag-stop="onNodeDragStop"><Background/><MiniMap/><Controls/><template #node-default="{data}"><div class="flow-node"><b>{{data.label}}</b><small>{{data.detail}}</small></div></template></VueFlow><div class="tree-panel"><button class="tree-toggle" @click="treeExpanded=!treeExpanded">{{treeExpanded?'⌄':'›'}}　Arborescence ({{treeRows.length}})</button><div v-if="treeExpanded" class="tree-list"><button v-for="n in treeRows" :key="n.nodeId" class="tree-row" :class="{selected:selectedId===n.nodeId}" :style="{marginLeft:(n.depth*18)+'px'}" draggable="true" @dragstart="draggedId=n.nodeId" @dragover.prevent @drop.stop.prevent="dropTree(n.nodeId)" @click="chooseNode(n.nodeId)"><span>{{n.type==='subflow'?'▱':'◇'}}</span>{{n.displayName}} <small>{{n.requirement}}</small></button></div></div></section>
+  <aside class="catalog panel"><div class="panel-title"><b>Composants</b><button class="tiny" @click="showCatalog=!showCatalog">{{showCatalog?'−':'+'}}</button></div><template v-if="showCatalog"><label class="template-picker">Modèles de départ<select v-model="templateSelection" @change="applyTemplate(templateSelection)"><option value="">Choisir un modèle…</option><option v-for="t in flowTemplates" :key="t.id" :value="t.id">{{t.label}}</option></select></label><div class="catalog-section">AUTHENTICATORS</div><p class="hint">{{catalogSource==='keycloak'?'Catalogue Keycloak enrichi avec les composants usuels.':'Catalogue local disponible hors connexion. Les Provider ID doivent être confirmés sur la cible.'}}</p><input v-model="catalogSearch" class="catalog-search" placeholder="Rechercher un composant…"><button v-for="c in filteredCatalog" :key="c.id" class="catalog-item" @click="addNode(c)"><span class="node-icon">◇</span><span><b>{{c.displayName}}</b><small>{{c.id}}</small></span><span class="plus">+</span></button><p v-if="!filteredCatalog.length" class="hint">Aucun composant correspondant.</p><button class="ghost full custom-provider-button" @click="customProviderOpen=true">+ Ajouter un Provider ID personnalisé</button><button class="catalog-item" @click="addSubflow"><span class="node-icon">▱</span><span><b>Sous-flux</b><small>Basic ou Form</small></span><span class="plus">+</span></button><label class="file-import">Importer un projet JSON<input type="file" accept="application/json,.json" @change="importFile"></label></template></aside>
+  <section class="canvas-wrap"><div class="canvas-toolbar"><div class="canvas-title"><b>{{modelValue.flow.alias}}</b><span class="muted"> · {{treeRows.length}} composants</span><span v-if="modelValue.flow.builtIn" class="warning-tag">Flow natif</span></div><div class="toolbar-actions"><div class="canvas-add-actions"><select v-model="quickProviderId" aria-label="Composant à ajouter"><option v-for="c in catalogEntries" :key="c.id" :value="c.id">{{c.displayName}}</option></select><button class="primary" @click="addQuickProvider">+ Ajouter</button><button class="ghost" @click="addSubflow">+ Sous-flux</button></div><button class="ghost" @click="validate">Valider</button><button class="ghost" @click="exportProject">JSON</button><button class="ghost" @click="exportYaml">YAML</button><button class="primary" @click="save">Enregistrer</button></div></div><VueFlow :nodes="nodes" :edges="edges" fit-view-on-init @node-click="onNodeClick" @node-drag-stop="onNodeDragStop"><Background/><MiniMap/><Controls/><template #node-default="{data}"><div class="flow-node"><b>{{data.label}}</b><small>{{data.detail}}</small></div></template></VueFlow><div v-if="!treeRows.length" class="empty-canvas"><b>Votre workflow est vide</b><span>Ajoutez un authenticator ou créez un sous-flux pour commencer.</span><div><button class="primary" @click="addQuickProvider">+ Ajouter {{quickProviderLabel}}</button><button class="ghost" @click="addSubflow">+ Ajouter un sous-flux</button></div></div><div class="tree-panel"><button class="tree-toggle" @click="treeExpanded=!treeExpanded">{{treeExpanded?'⌄':'›'}}　Arborescence ({{treeRows.length}})</button><div v-if="treeExpanded" class="tree-list"><button v-for="n in treeRows" :key="n.nodeId" class="tree-row" :class="{selected:selectedId===n.nodeId}" :style="{marginLeft:(n.depth*18)+'px'}" draggable="true" @dragstart="draggedId=n.nodeId" @dragover.prevent @drop.stop.prevent="dropTree(n.nodeId)" @click="chooseNode(n.nodeId)"><span>{{n.type==='subflow'?'▱':'◇'}}</span>{{n.displayName}} <small>{{n.requirement}}</small></button></div></div></section>
   <aside class="properties panel"><div class="panel-title"><b>Propriétés</b><span v-if="selected" class="tiny-label">{{selected.type}}</span></div><template v-if="selected"><label>Nom affiché<input :value="selected.displayName" disabled><small class="hint">Le nom d’un authenticator est fourni par Keycloak.</small></label><label>Requirement<select :value="selected.requirement" @change="updateNode(selected.nodeId,n=>n.requirement=($event.target as HTMLSelectElement).value)"><option v-for="choice in requirementChoices" :key="choice" :value="choice">{{choice}}</option></select></label><div class="order-actions"><button class="ghost" @click="reorder(-1)">↑ Monter</button><button class="ghost" @click="reorder(1)">↓ Descendre</button><button class="danger" @click="deleteNode(selected.nodeId)">Supprimer</button></div><template v-if="selected.type==='execution'"><label>Provider ID<input :value="selected.providerId" @input="updateNode(selected.nodeId,n=>n.providerId=($event.target as HTMLInputElement).value)"></label><div class="config-heading">Configuration du provider</div><p v-if="!propertySchemas.length" class="hint">Les propriétés configurables sont découvertes depuis Keycloak lorsque l'instance est connectée. Le JSON libre reste disponible.</p><template v-for="prop in propertySchemas" :key="prop.name"><label>{{prop.label||prop.name}}<select v-if="prop.type==='List'&&prop.options" :value="selected.config?.[prop.name]??prop.defaultValue??''" @change="setConfig(prop.name,($event.target as HTMLSelectElement).value)"><option v-for="o in prop.options" :key="o.value||o" :value="o.value||o">{{o.label||o}}</option></select><input v-else-if="String(prop.type).toLowerCase()==='boolean'" type="checkbox" :checked="String(selected.config?.[prop.name]??prop.defaultValue)==='true'" @change="setConfig(prop.name,($event.target as HTMLInputElement).checked?'true':'false')"><input v-else :type="prop.secret?'password':'text'" :value="selected.config?.[prop.name]??prop.defaultValue??''" @input="setConfig(prop.name,($event.target as HTMLInputElement).value)"><small class="hint">{{prop.helpText||''}}</small></label></template><label>Configuration JSON<textarea v-model="jsonConfig" rows="7" spellcheck="false"></textarea></label><button class="ghost full" @click="saveRawConfig">Appliquer le JSON</button></template><template v-else><label>Alias du sous-flux<input :value="selected.alias||''" :disabled="!!selected.remoteExecutionId" @input="updateNode(selected.nodeId,n=>n.alias=($event.target as HTMLInputElement).value)" placeholder="Généré automatiquement si vide"></label><label>Type<select :value="selected.flowType||'basic'" :disabled="!!selected.remoteExecutionId" @change="updateNode(selected.nodeId,n=>n.flowType=($event.target as HTMLSelectElement).value)"><option value="basic">Basic flow</option><option value="form">Form flow</option></select></label><label>Description<input :value="selected.description||''" @input="updateNode(selected.nodeId,n=>n.description=($event.target as HTMLInputElement).value)"></label><p class="hint">Pour ajouter des composants dans ce sous-flux, sélectionnez-le puis ajoutez un composant depuis le catalogue. Vous pouvez aussi réordonner les éléments en les faisant glisser dans l’arborescence.</p></template></template><p v-else class="empty">Sélectionnez un composant dans le canvas ou l'arborescence.</p>
    <div v-if="validation" class="validation" :class="validation.valid?'ok':'bad'"><b>{{validation.valid?'Validation réussie':'Erreurs de validation'}}</b><p v-for="e in validation.errors" :key="e">{{e}}</p><p v-for="w in validation.warnings" :key="w">Attention : {{w}}</p></div>
   </aside>
  </div>
  <div class="deploy-panel panel"><div><b>Déploiement Keycloak</b><p class="hint">Les modifications distantes sont réservées au rôle administrateur. Une sauvegarde est créée avant mise à jour.</p></div><div class="deploy-controls"><select v-model="deployMode"><option value="create">Créer un nouveau flow</option><option value="update">Mettre à jour un flow personnalisé existant</option></select><input v-model="deployAlias" placeholder="Alias cible"><label class="check-inline"><input v-model="allowDeletes" type="checkbox"> Autoriser les suppressions distantes</label><button class="primary" :disabled="!canDeploy" @click="openDeploy">Prévisualiser et déployer</button></div></div>
+ <div v-if="customProviderOpen" class="modal-backdrop"><form class="modal-card" @submit.prevent="createCustomProvider"><h3>Ajouter un composant Keycloak</h3><p>Ajoutez un provider qui n’apparaît pas dans le catalogue. Son identifiant doit correspondre exactement à un provider disponible dans la version Keycloak cible.</p><label>Provider ID<input v-model="customProviderId" required placeholder="ex. mon-authenticator"></label><label>Nom affiché<input v-model="customProviderName" placeholder="Nom du composant"></label><div class="modal-actions"><button type="button" class="ghost" @click="customProviderOpen=false">Annuler</button><button type="submit" class="primary">Ajouter au workflow</button></div></form></div>
  <div v-if="deployOpen" class="modal-backdrop"><div class="modal-card"><h3>Prévisualisation du déploiement</h3><p>{{deploymentPreview?.summary}}</p><p><b>Instance :</b> {{instances.find(x=>x.id===instanceId)?.name}} · <b>Realm :</b> {{realm}}</p><p><b>Mode :</b> {{deployMode==='create'?'Création':'Mise à jour'}} · <b>Alias :</b> {{deployAlias}}</p><p><b>État :</b> {{deploymentPreview?.valid?'Validation réussie':'Déploiement bloqué'}}</p><div v-if="deploymentPreview?.errors?.length" class="preview-errors"><b>Erreurs</b><p v-for="e in deploymentPreview.errors" :key="e">{{e}}</p></div><div v-if="deploymentPreview?.warnings?.length" class="preview-warnings"><b>Avertissements</b><p v-for="w in deploymentPreview.warnings" :key="w">{{w}}</p></div><div v-if="deploymentPreview?.counts" class="preview-counts">Créations : {{deploymentPreview.counts.create}} · Modifications : {{deploymentPreview.counts.modify}} · Suppressions : {{deploymentPreview.counts.delete}}</div><p v-if="allowDeletes" class="warning-text">Les exécutions absentes du projet seront supprimées.</p><label>Saisir exactement l’alias cible pour confirmer<input v-model="confirmValue" :placeholder="deployAlias"></label><div class="modal-actions"><button class="ghost" @click="deployOpen=false">Fermer</button><button class="primary" :disabled="confirmValue!==deployAlias || deploymentPreview?.valid===false" @click="confirmDeploy">Confirmer le déploiement</button></div></div></div>
 </template>

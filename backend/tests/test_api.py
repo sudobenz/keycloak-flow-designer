@@ -21,6 +21,34 @@ def test_auth_and_project_lifecycle():
         assert client.get('/api/users',headers=headers).status_code==200
 
 
+
+def test_new_project_without_client_id_can_be_created_validated_and_exported():
+    """The editor may send a draft without an ID; the API must persist and return one."""
+    with TestClient(app) as client:
+        login=client.post('/api/auth/login',json={'username':'admin','password':'Admin-Test-Password-2026!'})
+        assert login.status_code==200
+        headers={'Authorization':f"Bearer {login.json()['access_token']}"}
+        payload={
+            'schemaVersion':'1.0',
+            'project':{'name':'Workflow créé depuis le Designer'},
+            'target':{},
+            'flow':{'alias':'browser-created','providerId':'basic-flow','topLevel':True,'nodes':[]},
+        }
+        saved=client.post('/api/projects',json=payload,headers=headers)
+        assert saved.status_code==200
+        project_id=saved.json()['project']['id']
+        assert project_id
+        assert client.get(f'/api/projects/{project_id}',headers=headers).status_code==200
+        validated=client.post(f'/api/projects/{project_id}/validate',headers=headers)
+        assert validated.status_code==200
+        assert validated.json()['valid'] is True
+        exported=client.get(f'/api/projects/{project_id}/export.json',headers=headers)
+        assert exported.status_code==200
+        assert 'browser-created' in exported.text
+        exported_yaml=client.get(f'/api/projects/{project_id}/export.yaml',headers=headers)
+        assert exported_yaml.status_code==200
+
+
 def test_project_secret_is_encrypted_at_rest_and_restored():
     from app.project_security import protect_project_secrets, restore_project_secrets
     project={"flow":{"nodes":[{"type":"execution","secretConfigKeys":["bindCredential"],"config":{"bindCredential":"SuperSecret-123"}}]}}

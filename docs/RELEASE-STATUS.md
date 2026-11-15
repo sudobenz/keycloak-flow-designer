@@ -1,39 +1,42 @@
-# État de validation de la livraison 1.0.0
+# État de validation — Keycloak Flow Designer 1.0.5
 
-## Contrôles exécutés dans l'environnement de génération
+## Correctifs intégrés
 
-- Backend : `pytest -q` — 17 tests réussis.
-- Python : `python -m compileall -q app tests` — réussi.
-- Scripts TypeScript : transpilation syntaxique des blocs `<script setup>` et des fichiers `.ts` — réussie.
-- Script Linux `scripts/init-env.sh` : testé dans un répertoire temporaire ; génération de `.env`, remplacement des placeholders et permissions `0600` — réussi.
-- Génération des clés Fernet basée uniquement sur la bibliothèque standard Python — vérifiée.
-- Protection des paramètres providers marqués `secret`, y compris dans les snapshots de flows imbriqués — testée.
-- Historique de projets et restauration administrateur — test API réussi.
-- Liste et export JSON des snapshots de déploiement — test API réussi.
-- Endpoint d’audit protégé par le rôle administrateur ; affichage du journal dans l’interface.
-- Modèles Browser de base et Kerberos/OTP conditionnel — validation structurelle des exemples réussie.
-- Garde-fou de mise à jour : la provenance du flow importé doit correspondre à la cible sur la même instance/Realm — test réussi.
-
-## Contrôles non exécutés
-
-- Installation npm et compilation complète Vue/Vite : non exécutées. `npm install` a expiré dans l'environnement de génération ; aucun `node_modules` n'est inclus dans l'archive.
-- Build Docker Compose : non exécuté car le moteur Docker/Podman n'est pas installé dans l'environnement de génération.
-- Script Windows PowerShell : non exécuté, aucun interpréteur PowerShell n'est disponible.
-- Intégration réelle à un serveur Keycloak : non exécutée. Les routes et payloads s'appuient sur l'Admin REST API documentée, mais chaque version cible et chaque SPI tiers doivent être qualifiés sur un Realm de recette.
-
-## Conséquence
-
-Le livrable contient le code source, les conteneurs, les scripts, les tests backend et la documentation. Il ne doit pas être considéré comme certifié en production tant que les contrôles non exécutés n'ont pas été passés dans l'environnement cible. Commencer par un déploiement de laboratoire et un Realm non critique.
-
-
-## Correctif 1.0.3 — persistance de session frontend
-
+### 1.0.3 — gestion des sessions
 - Le client Axios ne supprime plus le jeton local sur chaque réponse HTTP 401.
-- Les tentatives de connexion `/auth/login` n'envoient plus un éventuel ancien jeton.
-- Le chargement initial valide désormais la session avec `/auth/me` avant de charger les autres ressources.
-- Un 401 provenant d'une autre route déclenche une nouvelle vérification de `/auth/me` ; la session n'est supprimée que si cette vérification confirme qu'elle est invalide.
-- Les refus d'accès sur les autres routes sont affichés sans déconnecter automatiquement l'utilisateur.
+- Le jeton n’est supprimé qu’après confirmation d’une session invalide par `/api/auth/me`.
+- Les refus d’accès sur les routes métier sont affichés sans déconnexion automatique.
 
-### Contrôles du correctif 1.0.3
+### 1.0.4 — sauvegarde, validation et exports
+- Les actions Valider, Export JSON, Export YAML et Prévisualiser le déploiement utilisent désormais une fonction de persistance qui retourne l’objet effectivement enregistré.
+- En cas d’échec de l’enregistrement, l’opération dépendante s’arrête : elle ne lance plus une validation ou un export sur un projet absent.
+- L’identifiant retourné par l’API est utilisé pour les appels suivants, afin d’éviter toute dépendance à une mise à jour asynchrone de la prop Vue.
+- Le détail d’erreur renvoyé par l’API est présenté dans l’interface.
 
-À exécuter avant validation de production : compilation frontend (`npm run build`), tests backend (`pytest -q`) et reconstruction des images via Portainer. L'intégration réelle doit ensuite être vérifiée avec une connexion utilisateur et une requête Keycloak volontairement refusée.
+### 1.0.5 — ajout de composants depuis le canvas
+- Un catalogue local de providers courants reste disponible sans connexion à une instance Keycloak.
+- Le catalogue distant est fusionné avec le catalogue local ; les providers découverts sur la cible enrichissent les métadonnées locales.
+- Recherche par nom ou Provider ID.
+- Ajout direct depuis la barre du canvas, ajout de sous-flux, et ajout manuel d’un Provider ID personnalisé.
+- Un état vide visible propose des actions immédiates pour commencer à construire le workflow.
+- Les identifiants de providers du catalogue local sont des valeurs usuelles : ils doivent être confirmés sur la version Keycloak cible avant déploiement.
+
+## Vérifications exécutées dans cet environnement
+
+- `pytest -q` : 18 tests backend réussis après ajout d’un test de création de projet sans identifiant fourni par le navigateur, validation et exports JSON/YAML.
+- Analyse syntaxique TypeScript des blocs `<script setup>` de `Designer.vue` et `App.vue` : réussie. Cette vérification ne remplace pas `vue-tsc` ni `vite build`.
+- `frontend/package.json` : JSON valide, version 1.0.5.
+- La compilation complète Vue/Vite n’a pas été exécutée : une tentative `npm install --ignore-scripts --no-audit --no-fund` a dépassé le délai disponible dans cet environnement. Le build frontend reste donc à confirmer après installation des dépendances.
+- Le build Docker n’a pas été exécuté : aucun moteur Docker/Podman n’est disponible ici.
+- La connexion et le déploiement sur une instance Keycloak réelle restent à qualifier dans l’environnement cible.
+
+## Contrôle après déploiement
+
+1. Ouvrir `/health` sur l’adresse de l’application et vérifier que la réponse indique `version: 1.0.5`.
+2. Dans le Designer, sans sélectionner d’instance, ajouter un composant depuis la barre du canvas ou le catalogue local, puis cliquer sur **Enregistrer**.
+3. Connecter une instance et un Realm pour comparer le catalogue local au catalogue réellement exposé par Keycloak.
+4. Vérifier que le projet apparaît dans **Projets**.
+5. Tester ensuite **Valider**, **JSON** et **YAML**.
+6. Si l’enregistrement échoue, relever le détail affiché dans l’interface et la ligne `POST /api/projects` dans les logs backend.
+
+La version ne doit pas être considérée comme certifiée en production avant un build frontend réussi, une reconstruction Docker, puis des essais sur un Realm Keycloak de recette.
