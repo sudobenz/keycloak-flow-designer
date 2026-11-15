@@ -1,4 +1,4 @@
-# Matrice fonctionnelle Keycloak — 1.2.2
+# Matrice fonctionnelle Keycloak — 1.2.3
 
 Cette matrice distingue les fonctions relevant du moteur **Authentication Flows**, les ressources voisines de Keycloak et les limites de l'API REST. L'objectif est de couvrir les capacités que Keycloak expose pour un Authentication Flow, sans inventer un modèle de transition différent.
 

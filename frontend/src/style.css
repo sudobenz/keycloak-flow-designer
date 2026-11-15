@@ -57,7 +57,7 @@
 @media(max-width:950px){.flow-direction-banner{top:94px;min-height:34px}.vue-flow{top:128px}.flow-bindings-grid{grid-template-columns:repeat(2,minmax(130px,1fr))}}
 @media(max-width:650px){.flow-direction-banner{top:112px;min-height:48px;align-items:flex-start;flex-direction:column;gap:2px}.flow-direction-banner b{white-space:normal}.vue-flow{top:160px}.flow-bindings-grid{grid-template-columns:1fr}.flow-binding-actions{align-items:stretch;flex-direction:column}}
 
-/* 1.2.2 — commandes de suppression explicites et métadonnées Keycloak */
+/* 1.2.3 — commandes de suppression explicites et métadonnées Keycloak */
 .axis-picker{display:flex;align-items:center;gap:6px;margin:0;font-size:10px;font-weight:650;white-space:nowrap}
 .axis-picker select{width:auto;min-width:112px;font-size:10px;padding:6px}
 .tree-entry{display:flex;align-items:center;gap:4px;min-width:0;width:max-content;max-width:100%}
