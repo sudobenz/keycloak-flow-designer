@@ -1,123 +1,130 @@
-<p align="center">
-  <img src="assets/banner.png" alt="Keycloak Flow Designer" width="100%">
-</p>
+# Keycloak Flow Designer — 1.2.2
 
-## Keycloak Flow Designer — 1.0.6
+Éditeur web pour concevoir, importer, contrôler et déployer des **Authentication Flows Keycloak**. L'éditeur suit le modèle natif de Keycloak : exécutions ordonnées, requirements et sous-flows Basic/Form. Il ne transpose pas artificiellement les graphes de transitions d'Authentik.
 
-Éditeur web autonome pour concevoir, importer, valider et déployer des Authentication Flows Keycloak.
+## Nouveautés 1.2.2
 
-⚠️ Attention — Projet expérimental
+- Correctif de création des sous-flows : utilisation des provider IDs Keycloak `basic-flow` / `form-flow`, et choix explicite du `FormAuthenticator` (par défaut `registration-page-form`).
+- Les FormAuthenticators et les Form Actions sont présentés séparément : le premier rend le formulaire, les secondes sont les étapes à l'intérieur du `form-flow`.
+- Import corrigé des sous-flows : Keycloak fournit leur alias via `displayName` et leur identifiant interne via `flowId` ; ces deux informations sont conservées pour les mises à jour.
+- Validation du FormAuthenticator contre le catalogue `form-providers` du Realm avant déploiement.
 
-Ce projet est actuellement en phase de développement et de test.
+- Suppression d'un élément depuis son nœud dans le canvas, depuis sa ligne dans l'arborescence ou depuis le panneau Propriétés. Les raccourcis `Suppr` / `Backspace` sont disponibles hors des champs de saisie.
+- Annulation / rétablissement des modifications avec `Ctrl+Z`, `Ctrl+Y` ou `Ctrl+Maj+Z`.
+- Choix de l'orientation du diagramme : haut vers bas ou gauche vers droite.
+- Début et fin du flow visibles ; flèches orientées, entrée dans un sous-flow et liaison de retour vers l'étape suivante du parent.
+- Ajout, duplication locale, réordonnancement et déplacement de composants dans l'arborescence.
+- Alias et description éditables pour les flows racine et les sous-flows ; les exécutions authenticator ne possèdent pas d’alias/description REST modifiables.
+- Les requirements d'un `form-flow` sont limités à `REQUIRED` et `DISABLED`. Le sous-flow « Forms » du Browser flow standard est un Basic flow et peut donc être `ALTERNATIVE`.
+- La validation vérifie aussi les champs de configuration obligatoires même si la configuration locale est vide.
 
-Il n'est pas validé pour une utilisation en production.
+## Capacités Authentication Flow prises en charge
 
-Certaines fonctionnalités peuvent présenter des bugs, des limitations ou des comportements inattendus. Toute utilisation doit être réalisée dans un environnement de test, avec une instance Keycloak de laboratoire.
+- Flows racine `basic-flow` et `client-flow`.
+- Sous-flows `basic-flow` et `form-flow` imbriqués.
+- Authenticator providers et client authenticator providers découverts sur l'instance cible.
+- Conditions Keycloak et sous-flows conditionnels.
+- Requirements et priorités des exécutions ; alias et descriptions des flows et sous-flows. Alias de configuration distinct pour les authenticator configs.
+- Configuration d'authenticator créée, modifiée ou supprimée ; schéma de propriétés récupéré dynamiquement ; configuration JSON libre en complément.
+- Authenticator Reference et Authenticator Reference Max Age pour l'intégration AMR OIDC.
+- Import récursif, duplication d'un flow natif, duplication locale d'une exécution, comparaison, validation, export projet JSON/YAML KFD, sauvegarde avant mise à jour et tentative de compensation.
+- Bindings de Realm : Browser, Registration, Direct Grant, Reset Credentials, Client Authentication, Docker Authentication et First Broker Login.
 
-L'utilisation sur une infrastructure réelle se fait sous votre entière responsabilité.
+Le catalogue local sert uniquement à démarrer hors connexion. Le catalogue Keycloak de l'instance réelle est la référence : les providers et leurs schémas varient selon la version installée et les extensions SPI présentes.
 
-## Corrections 1.0.1 à 1.0.6
+## Modèle d'exécution et représentation du parcours
 
-- Correction du typage TypeScript dans le déplacement des nœuds de l’arborescence.
-- En 1.0.3, la gestion de session ne supprime plus le jeton sur tous les HTTP 401.
-- En 1.0.4, les opérations Valider et Export utilisent l’identifiant renvoyé après la sauvegarde et s’arrêtent si celle-ci échoue.
-- En 1.0.5, le canvas dispose de contrôles d’ajout directs, d’un catalogue local de composants utilisable hors connexion, d’une recherche et d’un ajout de Provider ID personnalisé.
-- En 1.0.6, le modèle réactif Vue est déballé récursivement avant clonage, ce qui corrige l’échec `DataCloneError` lors de l’ajout ou de la modification des composants.
+Les exécutions d'un même niveau sont séquentielles et leur priorité détermine l'ordre. Les flèches du canvas montrent cet ordre structurel. Une flèche ne signifie pas qu'un échec d'authenticator sera automatiquement redirigé vers une branche graphique : le comportement concret dépend du provider et de son résultat (`success`, challenge, échec, etc.). Les requirements `REQUIRED`, `ALTERNATIVE`, `DISABLED` et `CONDITIONAL` définissent la logique de traitement Keycloak ; `CONDITIONAL` s'applique aux sous-flows, pas aux exécutions authenticator.
 
-## Fonctions livrées
+Un sous-flow Basic peut être `REQUIRED`, `ALTERNATIVE`, `CONDITIONAL` ou `DISABLED`. Un `form-flow` n'accepte que `REQUIRED` ou `DISABLED` et référence un FormAuthenticator (par exemple `registration-page-form`) ; son contenu est constitué d'exécutions Form Action. Le sous-flow nommé « Forms » dans le Browser flow standard est un Basic flow, malgré son nom. Les choix de requirements exposés par Keycloak restent la référence. Voir `docs/KEYCLOAK-CAPABILITY-MATRIX.md`.
 
-- Interface Vue 3 / TypeScript avec Vue Flow : canvas, zoom, mini-carte, arborescence.
-- Thèmes clair et sombre.
-- Authentification locale : comptes administrateur, éditeur et lecteur ; changement de mot de passe ; activation/désactivation de comptes.
+## Fonctions qui ne sont pas des exécutions Authentication Flow
+
+Certains éléments Keycloak proches de l'authentification ne sont pas des étapes standards du graphe Authentication Flow :
+
+- Les **Required Actions** sont des actions distinctes associées à un utilisateur ou déclenchées à la suite d'une authentification.
+- Les **Form providers** et **Form Action providers** sont deux SPI distincts : un FormAuthenticator est attaché au sous-flow `form-flow`, tandis que les Form Action providers sont les exécutions placées à l'intérieur de ce sous-flow.
+- Les **Identity Provider mappers**, protocol mappers, client policies et les paramètres d'Identity Providers sont des ressources séparées.
+- Le **Post Login Flow** se configure au niveau de l'Identity Provider ; ce n'est pas un binding global de Realm.
+
+KFD affiche les FormActionFactory disponibles lorsqu’un sous-flow `form-flow` est sélectionné, et les FormAuthenticatorFactory à titre informatif. La matrice documente les capacités et limites de la version.
+
+## Fonctions et architecture
+
+- Frontend Vue 3, TypeScript et Vue Flow ; thèmes clair et sombre.
+- Backend Python FastAPI ; API documentée via OpenAPI.
+- Authentification locale avec rôles administrateur, éditeur et lecteur.
 - Connexion à plusieurs instances Keycloak avec `client_credentials`.
-- Stockage des projets en JSON ; secrets des connexions et propriétés providers marquées `secret` chiffrés au repos avec Fernet.
-- Découverte des Realms, flows, authenticator providers et descriptions de configuration.
-- Import récursif des flows et sous-flows dans le modèle JSON.
-- Duplication des flows natifs Keycloak vers un flow personnalisé.
-- Ajout d'exécutions et de sous-flux depuis le catalogue local ou dynamique, recherche de providers, ajout manuel d’un Provider ID personnalisé, exigences, ordre, configuration JSON et formulaires générés à partir des descriptions de providers.
-- Validation, prévisualisation, sauvegarde de snapshot, déploiement REST et tentative de compensation en cas d'échec.
-- Historique versionné des projets (50 versions conservées par projet) avec restauration réservée à l’administrateur ; journaux d’audit locaux.
+- Stockage de projets JSON ; chiffrement au repos des secrets des connexions et des paramètres provider marqués secrets.
+- Déploiement Docker Compose / Portainer.
 
 ## Installation Docker
 
 Linux :
+
 ```bash
 bash scripts/init-env.sh
-# Le script crée .env, deux clés et un mot de passe admin aléatoire.
 docker compose up -d --build
 ```
 
 Windows PowerShell :
+
 ```powershell
 .\scripts\init-env.ps1
 docker compose up -d --build
 ```
 
-Les scripts nécessitent Python 3 uniquement et refusent d'écraser un `.env` existant. Les clés Fernet sont générées avec la bibliothèque standard Python.
-
 Interface : `http://localhost:8080`  
-API OpenAPI : `http://localhost:8080/api/docs`  
-API interne : `http://backend:8000/api/docs` depuis le réseau Docker.
+API OpenAPI : `http://localhost:8080/api/docs`
 
-Compte initial : `admin` avec le mot de passe défini dans `INITIAL_ADMIN_PASSWORD`. Changer ce mot de passe dans **Compte** dès la première connexion.
+Compte initial : `admin` avec le mot de passe défini dans `INITIAL_ADMIN_PASSWORD`. Changer ce mot de passe immédiatement après la première connexion.
 
 ## Connexion à Keycloak
 
-1. Créer un client confidentiel dans le Realm prévu pour le compte de service.
-2. Activer Service Accounts.
-3. Attribuer les rôles d'administration strictement nécessaires pour lire et gérer les Authentication Flows du Realm cible.
-4. Ajouter dans l'application l'URL de base de l'Admin REST (par exemple `https://sso.example.net`) et l'URL token `https://sso.example.net/realms/<realm-technique>/protocol/openid-connect/token`.
-5. Tester la connexion, puis sélectionner un Realm dans le Designer.
+1. Créer un client confidentiel et activer Service Accounts.
+2. Attribuer au compte de service les permissions minimales nécessaires pour lire et gérer les Authentication Flows et leurs configurations.
+3. Pour modifier les Flow Bindings, autoriser également la gestion des paramètres du Realm.
+4. Enregistrer les URL Admin REST et token, l'identifiant client et le secret.
+5. Tester la connexion et sélectionner le Realm cible.
 
-Ne pas utiliser le compte administrateur global par défaut. Garder la vérification TLS activée en production.
+Conserver la vérification TLS activée en production. Ne pas utiliser le compte administrateur global par défaut.
 
-## Déploiement de flows
+## Déploiement d'un flow
 
-- **Créer** : crée un flow personnalisé avec l'alias saisi, puis ajoute les exécutions et sous-flux récursivement.
-- **Mettre à jour** : réservé à un flow personnalisé existant, jamais à un flow intégré (`builtIn`). Il faut d’abord importer le flow cible dans le projet ; ses identifiants d’exécution servent à éviter les doublons. Un snapshot JSON du flow est enregistré avant modification.
-- Le mode mise à jour ne supprime les exécutions distantes absentes du projet que lorsque « Autoriser les suppressions distantes » est coché. Les exports YAML sont des manifestes KFD documentés, pas un format YAML natif universel de Keycloak.
-- La confirmation exige de saisir exactement l'alias cible. Seuls les comptes `admin` peuvent lancer le déploiement.
-- En cas d'erreur, le backend tente une compensation à partir du snapshot. Une API REST multi-appels n'est pas atomique : une restauration complète ne peut être garantie si Keycloak ou le réseau reste indisponible pendant le rollback. Vérifier le rapport d'erreur et l'état du Realm.
+- La création d'un flow personnalisé et la mise à jour d'un flow existant sont deux opérations distinctes.
+- Pour mettre à jour, importer d'abord le flow cible afin de conserver ses identifiants d'exécution.
+- La modification d'un flow natif nécessite de le dupliquer.
+- Les suppressions distantes doivent être autorisées explicitement ; les suppressions locales dans le projet ne sont pas immédiatement propagées à Keycloak.
+- Un snapshot est conservé avant une mise à jour. L'API REST répartit le déploiement sur plusieurs appels : le rollback est une compensation best-effort, pas une transaction atomique.
+- Les Flow Bindings changent immédiatement le comportement du Realm ; vérifier le résultat sur un Realm de laboratoire avant production.
 
-## Stockage / sauvegarde
+Les exports JSON/YAML sont des manifests de projet KFD, pas des formats natifs universels d'import Keycloak.
 
-Tous les projets et journaux sont enregistrés sous `/app/data`, dans le volume Docker `designer_data`. Sauvegarder ce volume et conserver séparément `ENCRYPTION_KEY` et `SECRET_KEY`. La perte de `ENCRYPTION_KEY` empêche le déchiffrement des secrets des instances et des propriétés provider marquées secrètes. Les exports JSON/YAML contiennent les valeurs en clair et doivent être protégés.
+## Limites à connaître
 
-## Développement local
+- La validation structurelle et la prévisualisation ne remplacent pas un test de connexion sur un Realm de laboratoire.
+- Les providers tiers / personnalisés sont configurables dans la mesure où Keycloak les expose et où leur schéma de configuration est disponible. Sinon, le JSON libre est fourni, mais les exigences propres au SPI doivent être vérifiées par son éditeur.
+- Les propriétés d'exécution que l'API ne permet pas de modifier sont affichées en lecture seule.
+- La matrice fonctionnelle précise les ressources intégrées, les ressources distinctes et les fonctions non couvertes.
+
+## Développement et vérification
 
 Backend :
+
 ```bash
 cd backend
-python -m venv .venv && . .venv/bin/activate
+python -m venv .venv
+. .venv/bin/activate
 pip install -r requirements-dev.txt
-uvicorn app.main:app --reload
+pytest -q
 ```
+
 Frontend :
+
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run build
 ```
-Créer `frontend/.env.local` avec `VITE_API_URL=http://localhost:8000/api`.
-Tests backend : `cd backend && pytest`.
 
-## Exemple de départ
-
-Les fichiers `examples/*.example.json` peuvent être importés dans le Designer. Deux modèles de départ sont aussi disponibles directement dans le sélecteur **Modèles de départ**. Ils sont illustratifs : vérifier les providers disponibles et adapter les requirements à votre parcours avant tout déploiement.
-
-## Compatibilité
-
-L'intégration utilise les endpoints Admin REST Authentication Management disponibles dans les versions prises en charge. La matrice multi-version doit être qualifiée contre les versions réellement exploitées, en particulier pour les SPI tiers et les descriptions de configuration. La détection dynamique dépend des métadonnées exposées par chaque provider. Les composants sans description sont accessibles via la configuration JSON avancée.
-
-## Limites fonctionnelles connues
-
-- L'éditeur représente la structure d'exécutions ordonnée de Keycloak ; il ne propose pas un moteur de branchement arbitraire. Les requirements sont ceux du moteur Keycloak.
-- La simulation d'authentification réelle doit être effectuée sur un Realm de test avec de vrais navigateurs/clients ; la validation interne est structurelle.
-- L'API d'administration Keycloak varie selon la version. Tester d'abord sur un Realm de laboratoire avant toute modification d'un flow utilisé en production.
-
-
-## Version 1.0.6
-
-- Correction du clonage du modèle dans l'éditeur : les Proxy réactifs Vue sont déballés récursivement avant `structuredClone`.
-- Le clic sur un authenticator, un sous-flux ou le bouton d'ajout ne doit plus échouer avec `DataCloneError`.
-- La même correction couvre les modifications, suppressions, déplacements, sauvegardes, validations et exports qui utilisent le clone du modèle.
+Créer `frontend/.env.local` avec `VITE_API_URL=http://localhost:8000/api` pour le développement local.

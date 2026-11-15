@@ -18,3 +18,58 @@
 
 
 .audit-list{padding:8px 16px}.audit-row{display:flex;justify-content:space-between;gap:18px;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)}.audit-row div{display:grid;gap:4px}.audit-row small,.audit-row time{font-size:11px;color:var(--muted)}.audit-row time{white-space:nowrap}
+
+/* Vue Flow editor: explicit execution direction, node actions and Realm bindings */
+.flow-bindings-panel{margin:0 0 10px;padding:10px 14px}
+.flow-bindings-panel summary{cursor:pointer;font-size:12px;font-weight:700}
+.flow-bindings-grid{display:grid;grid-template-columns:repeat(4,minmax(145px,1fr));gap:8px 12px;padding-top:8px}
+.flow-bindings-grid label{margin:4px 0;font-size:11px}
+.flow-bindings-grid select{font-size:11px}
+.flow-binding-actions{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:4px}
+.flow-direction-banner{position:absolute;z-index:4;top:72px;left:0;right:0;min-height:34px;display:flex;align-items:center;gap:12px;padding:5px 12px;background:#eef5ff;border-bottom:1px solid #cadcf8;color:#24446f;font-size:10px}
+.flow-direction-banner b{white-space:nowrap}
+.flow-direction-banner span{color:#526982}
+:root[data-theme="dark"] .flow-direction-banner{background:#1d2f49;border-color:#334b6d;color:#d7e6ff}
+:root[data-theme="dark"] .flow-direction-banner span{color:#b2c5df}
+.vue-flow{top:106px}
+.vue-flow__edge-text{font-size:9px;fill:var(--muted)}
+.vue-flow__edge-path{stroke-width:2}
+.flow-node{position:relative;display:grid;gap:6px;min-width:165px;max-width:230px;padding:1px}
+.flow-node-heading{display:flex;align-items:center;justify-content:space-between;color:#64748b;font-size:9px;font-weight:750;letter-spacing:.5px}
+.node-delete{width:22px;height:22px;min-width:22px;padding:0;border:1px solid #fecaca;border-radius:5px;background:#fff1f2;color:#be123c;font-size:16px;line-height:1}
+.node-delete:hover{background:#ffe4e6;color:#9f1239}
+.flow-node.selected{outline:2px solid #3b82f6;outline-offset:5px;border-radius:5px}
+.flow-node-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:2px;color:#64748b;font-size:8px;font-weight:700}
+.requirement-pill{border-radius:99px;padding:3px 7px;background:#e2e8f0;color:#334155}
+.requirement-pill.required{background:#fee2e2;color:#991b1b}
+.requirement-pill.alternative{background:#dbeafe;color:#1d4ed8}
+.requirement-pill.conditional{background:#f3e8ff;color:#6b21a8}
+.requirement-pill.disabled{background:#e5e7eb;color:#4b5563}
+.flow-boundary{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 14px;border-radius:99px;font-size:9px;font-weight:800;letter-spacing:.8px;white-space:nowrap;box-shadow:0 2px 8px #0f172a12}
+.flow-start{background:#dcfce7;border:1px solid #86efac;color:#166534}
+.flow-end{background:#ffe4e6;border:1px solid #fda4af;color:#9f1239}
+:root[data-theme="dark"] .flow-start{background:#123c2c;border-color:#27734f;color:#bbf7d0}
+:root[data-theme="dark"] .flow-end{background:#4a1e2a;border-color:#9f4156;color:#fecdd3}
+:root[data-theme="dark"] .vue-flow__node{background:#202e42;color:#e5eaf2;border-color:#475569}
+:root[data-theme="dark"] .vue-flow__node.subflow-node{background:#30264a;border-color:#8b5cf6}
+:root[data-theme="dark"] .vue-flow__node .flow-node small{color:#a6b4c8}
+@media(max-width:1250px){.flow-bindings-grid{grid-template-columns:repeat(3,minmax(130px,1fr))}}
+@media(max-width:950px){.flow-direction-banner{top:94px;min-height:34px}.vue-flow{top:128px}.flow-bindings-grid{grid-template-columns:repeat(2,minmax(130px,1fr))}}
+@media(max-width:650px){.flow-direction-banner{top:112px;min-height:48px;align-items:flex-start;flex-direction:column;gap:2px}.flow-direction-banner b{white-space:normal}.vue-flow{top:160px}.flow-bindings-grid{grid-template-columns:1fr}.flow-binding-actions{align-items:stretch;flex-direction:column}}
+
+/* 1.2.2 — commandes de suppression explicites et métadonnées Keycloak */
+.axis-picker{display:flex;align-items:center;gap:6px;margin:0;font-size:10px;font-weight:650;white-space:nowrap}
+.axis-picker select{width:auto;min-width:112px;font-size:10px;padding:6px}
+.tree-entry{display:flex;align-items:center;gap:4px;min-width:0;width:max-content;max-width:100%}
+.tree-row{display:flex;flex:1;align-items:center;gap:7px;width:auto;max-width:none;min-width:0;text-align:left}
+.tree-row-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tree-row small{margin-left:auto;white-space:nowrap}
+.tree-delete{display:inline-flex;align-items:center;justify-content:center;width:25px;height:25px;min-width:25px;padding:0;border:1px solid #fecaca;border-radius:5px;background:#fff1f2;color:#be123c;font-size:16px;line-height:1;cursor:pointer}
+.tree-delete:hover{background:#ffe4e6;color:#9f1239}
+.execution-meta{display:grid;gap:4px;margin:8px 0;padding:8px;border:1px solid var(--border);border-radius:7px;font-size:10px;overflow-wrap:anywhere}
+.execution-meta small{color:var(--muted);font-size:9px}
+.toolbar-actions button:disabled{opacity:.38;cursor:not-allowed}
+:root[data-theme="dark"] .tree-delete{background:#3b2029;border-color:#82404f;color:#fecdd3}
+:root[data-theme="dark"] .tree-delete:hover{background:#542632;color:#fff1f2}
+:root[data-theme="dark"] .tree-row.selected{background:#1e3a5f;color:#dbeafe}
+@media(max-width:650px){.axis-picker{width:100%;justify-content:space-between}.axis-picker select{flex:1}.tree-entry{max-width:100%}.tree-row{max-width:calc(100vw - 110px)}}

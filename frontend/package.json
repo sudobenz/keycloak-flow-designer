@@ -1,6 +1,6 @@
 {
   "name": "keycloak-flow-designer",
-  "version": "1.0.6",
+  "version": "1.2.2",
   "private": true,
   "type": "module",
   "scripts": {

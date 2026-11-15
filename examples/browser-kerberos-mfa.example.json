@@ -55,7 +55,7 @@
         "displayName": "Forms",
         "providerId": "basic-flow",
         "alias": "forms-kerberos-mfa",
-        "flowType": "form",
+        "flowType": "basic",
         "requirement": "ALTERNATIVE",
         "requirementChoices": [
           "REQUIRED",

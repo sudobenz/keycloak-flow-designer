@@ -23,7 +23,7 @@ async def lifespan(app):
     init_admin()
     yield
 
-app = FastAPI(title="Keycloak Flow Designer API", version="1.0.6", description="Conception, import, validation et déploiement contrôlé des Authentication Flows Keycloak.", docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None, lifespan=lifespan)
+app = FastAPI(title="Keycloak Flow Designer API", version="1.2.2", description="Conception, import, validation et déploiement contrôlé des Authentication Flows Keycloak.", docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None, lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_credentials=True, allow_methods=["GET","POST","PUT","PATCH","DELETE"], allow_headers=["Authorization","Content-Type"])
 LOGIN_ATTEMPTS = {}
 LOGIN_WINDOW_SECONDS = 600
@@ -39,6 +39,15 @@ class DeployRequest(BaseModel):
 
 class DuplicateRequest(BaseModel):
     newAlias: str = Field(min_length=1, max_length=100)
+
+class FlowBindingsUpdate(BaseModel):
+    browserFlow: str | None = None
+    registrationFlow: str | None = None
+    directGrantFlow: str | None = None
+    resetCredentialsFlow: str | None = None
+    clientAuthenticationFlow: str | None = None
+    dockerAuthenticationFlow: str | None = None
+    firstBrokerLoginFlow: str | None = None
 
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9._-]+$")
@@ -83,7 +92,7 @@ def project_get(project_id):
     return restore_project_secrets(read_json(path,{}))
 
 @app.get("/health")
-def health(): return {"status":"ok","version":"1.0.6"}
+def health(): return {"status":"ok","version":"1.2.2"}
 
 @app.post("/api/auth/login")
 def login(data: LoginInput, request: Request):
@@ -179,6 +188,46 @@ async def flows(instance_id: str, realm: str, user=Depends(require_editor)):
     try: return await kc(instance_id).flows(realm)
     except httpx.HTTPError as exc: raise HTTPException(502,str(exc))
 
+FLOW_BINDING_FIELDS = (
+    "browserFlow", "registrationFlow", "directGrantFlow", "resetCredentialsFlow",
+    "clientAuthenticationFlow", "dockerAuthenticationFlow", "firstBrokerLoginFlow",
+)
+
+@app.get("/api/instances/{instance_id}/realms/{realm}/flow-bindings")
+async def get_flow_bindings(instance_id: str, realm: str, user=Depends(require_editor)):
+    try:
+        representation = await kc(instance_id).realm_representation(realm)
+        return {field: representation.get(field) for field in FLOW_BINDING_FIELDS}
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Lecture des liaisons de flows impossible : {exc}")
+
+@app.put("/api/instances/{instance_id}/realms/{realm}/flow-bindings")
+async def update_flow_bindings(instance_id: str, realm: str, payload: FlowBindingsUpdate, user=Depends(require_admin)):
+    try:
+        client = kc(instance_id)
+        supplied = payload.model_dump(exclude_unset=True)
+        # La valeur nulle signifie « ne pas modifier » afin qu'un champ vide dans
+        # l'interface ne puisse pas réinitialiser un binding par inadvertance.
+        changes = {field: alias for field, alias in supplied.items() if alias}
+        realm_flows = await client.flows(realm) or []
+        by_alias = {item.get("alias"): item for item in realm_flows if item.get("alias") and item.get("topLevel", True)}
+        for field, alias in changes.items():
+            if alias not in by_alias:
+                raise HTTPException(400, f"Le flow '{alias}' n'existe pas dans le Realm.")
+            provider_id = by_alias[alias].get("providerId")
+            expected = "client-flow" if field == "clientAuthenticationFlow" else "basic-flow"
+            if provider_id and provider_id != expected:
+                raise HTTPException(400, f"Le flow '{alias}' est de type {provider_id}; {field} attend {expected}.")
+        if changes:
+            await client.update_realm_flow_bindings(realm, changes)
+        updated = await client.realm_representation(realm)
+        audit("realm_flow_bindings_updated", user["username"], {"instanceId":instance_id,"realm":realm,"bindings":changes})
+        return {field: updated.get(field) for field in FLOW_BINDING_FIELDS}
+    except HTTPException:
+        raise
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Mise à jour des liaisons de flows impossible : {exc}")
+
 @app.get("/api/instances/{instance_id}/realms/{realm}/flows/{alias}/executions")
 async def executions(instance_id: str, realm: str, alias: str, user=Depends(require_editor)):
     try: return await kc(instance_id).executions(realm,alias)
@@ -220,12 +269,40 @@ async def catalog(instance_id: str, realm: str, user=Depends(require_editor)):
                 except httpx.HTTPStatusError as exc:
                     item["configDescriptionError"]=f"HTTP {exc.response.status_code}"
             result.append(item)
-        form_actions=[]; form_providers=[]
-        try: form_actions=await client.form_action_providers(realm)
+        client_authenticators=[]; form_actions=[]; form_providers=[]
+        try:
+            client_authenticators=await client.client_authenticator_providers(realm)
+            enriched=[]
+            for provider in client_authenticators or []:
+                provider_id=provider.get("id") or provider.get("providerId")
+                item={**provider,"id":provider_id,"configDescription":None}
+                if provider_id:
+                    try: item["configDescription"]=await client.config_description(realm,provider_id)
+                    except httpx.HTTPStatusError as exc: item["configDescriptionError"]=f"HTTP {exc.response.status_code}"
+                enriched.append(item)
+            client_authenticators=enriched
+        except httpx.HTTPError: pass
+        try:
+            form_actions=await client.form_action_providers(realm)
+            enriched_form_actions=[]
+            for provider in form_actions or []:
+                provider_id=provider.get("id") or provider.get("providerId")
+                item={**provider,"id":provider_id,"configDescription":None}
+                if provider_id:
+                    try: item["configDescription"]=await client.config_description(realm,provider_id)
+                    except httpx.HTTPStatusError as exc: item["configDescriptionError"]=f"HTTP {exc.response.status_code}"
+                enriched_form_actions.append(item)
+            form_actions=enriched_form_actions
         except httpx.HTTPError: pass
         try: form_providers=await client.form_providers(realm)
         except httpx.HTTPError: pass
-        return {"source":"keycloak","providers":result,"formActionProviders":form_actions,"formProviders":form_providers}
+        return {
+            "source":"keycloak",
+            "providers":result,
+            "clientAuthenticatorProviders":client_authenticators,
+            "formActionProviders":form_actions,
+            "formProviders":form_providers,
+        }
     except httpx.HTTPStatusError as exc:
         raise HTTPException(exc.response.status_code,f"Découverte des providers impossible : {exc.response.text[:1000]}")
     except httpx.HTTPError as exc: raise HTTPException(502,str(exc))

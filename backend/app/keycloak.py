@@ -40,10 +40,17 @@ class KeycloakClient:
             raise
 
     async def realms(self): return await self.request("GET", "/admin/realms?briefRepresentation=true")
+    async def realm_representation(self, realm): return await self.request("GET", f"/admin/realms/{quote(realm,safe='')}")
+    async def update_realm(self, realm, representation): return await self.request("PUT", f"/admin/realms/{quote(realm,safe='')}", json=representation)
+    async def update_realm_flow_bindings(self, realm, bindings):
+        # Envoi d'une représentation partielle : ne pas réécrire les paramètres SMTP,
+        # fédérations ou secrets du Realm pour ne modifier que les bindings de flows.
+        return await self.request("PUT", f"/admin/realms/{quote(realm,safe='')}", json={"realm":realm, **bindings})
     async def flows(self, realm): return await self.request("GET", f"/admin/realms/{quote(realm,safe='')}/authentication/flows")
     async def flow(self, realm, flow_id): return await self.request("GET", f"/admin/realms/{quote(realm,safe='')}/authentication/flows/{quote(flow_id,safe='')}")
     async def executions(self, realm, alias): return await self.request("GET", f"/admin/realms/{quote(realm,safe='')}/authentication/flows/{quote(alias,safe='')}/executions")
     async def providers(self, realm): return await self.request("GET", f"/admin/realms/{quote(realm,safe='')}/authentication/authenticator-providers")
+    async def client_authenticator_providers(self, realm): return await self.request("GET", f"/admin/realms/{quote(realm,safe='')}/authentication/client-authenticator-providers")
     async def config_description(self, realm, provider_id): return await self.request("GET", f"/admin/realms/{quote(realm,safe='')}/authentication/config-description/{quote(provider_id,safe='')}")
     async def form_action_providers(self, realm): return await self.request("GET", f"/admin/realms/{quote(realm,safe='')}/authentication/form-action-providers")
     async def form_providers(self, realm): return await self.request("GET", f"/admin/realms/{quote(realm,safe='')}/authentication/form-providers")
@@ -52,8 +59,17 @@ class KeycloakClient:
         return await self.request("POST", f"/admin/realms/{quote(realm,safe='')}/authentication/flows", json=body)
     async def create_execution(self, realm, parent_alias, provider_id):
         return await self.request("POST", f"/admin/realms/{quote(realm,safe='')}/authentication/flows/{quote(parent_alias,safe='')}/executions/execution", json={"provider":provider_id})
-    async def create_subflow(self, realm, parent_alias, alias, description, flow_type="basic"):
-        return await self.request("POST", f"/admin/realms/{quote(realm,safe='')}/authentication/flows/{quote(parent_alias,safe='')}/executions/flow", json={"alias":alias,"description":description,"provider":"basic-flow","type":flow_type})
+    async def create_subflow(self, realm, parent_alias, alias, description, flow_type="basic", form_provider="registration-page-form"):
+        # Keycloak expects AuthenticationFlow.providerId values here, not UI labels.
+        # A form-flow execution also stores its FormAuthenticator provider on the
+        # execution (for example registration-page-form).
+        provider_id = {"basic": "basic-flow", "basic-flow": "basic-flow", "form": "form-flow", "form-flow": "form-flow", "client": "client-flow", "client-flow": "client-flow"}.get(flow_type)
+        if provider_id is None:
+            raise ValueError(f"Type de sous-flow Keycloak inconnu : {flow_type}")
+        body = {"alias": alias, "description": description or "", "type": provider_id}
+        if provider_id == "form-flow":
+            body["provider"] = form_provider or "registration-page-form"
+        return await self.request("POST", f"/admin/realms/{quote(realm,safe='')}/authentication/flows/{quote(parent_alias,safe='')}/executions/flow", json=body)
     async def set_requirement(self, realm, parent_alias, execution_id, requirement):
         return await self.request("PUT", f"/admin/realms/{quote(realm,safe='')}/authentication/flows/{quote(parent_alias,safe='')}/executions", json={"id":execution_id,"requirement":requirement})
     async def delete_execution(self, realm, execution_id):

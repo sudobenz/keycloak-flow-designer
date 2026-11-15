@@ -37,7 +37,7 @@
         "displayName": "Forms",
         "providerId": "basic-flow",
         "alias": "forms-custom",
-        "flowType": "form",
+        "flowType": "basic",
         "requirement": "ALTERNATIVE",
         "requirementChoices": [
           "REQUIRED",

@@ -114,3 +114,42 @@ def test_backup_list_and_export_are_admin_only(tmp_path, monkeypatch):
         assert items.status_code==200 and any(x['id']==backup_id for x in items.json())
         exported=client.get(f'/api/backups/{backup_id}/export.json',headers=headers)
         assert exported.status_code==200 and 'browser-custom' in exported.text
+
+
+def test_realm_flow_bindings_round_trip_and_require_admin(monkeypatch):
+    import app.main as main
+    class FakeRealmClient:
+        def __init__(self):
+            self.realm = {
+                "realm":"demo", "browserFlow":"browser-default", "registrationFlow":"registration-default",
+                "directGrantFlow":"direct-default", "resetCredentialsFlow":"reset-default",
+                "clientAuthenticationFlow":"clients-default", "dockerAuthenticationFlow":"docker-default",
+                "firstBrokerLoginFlow":"broker-default", "enabled":True,
+            }
+        async def realm_representation(self, realm): return dict(self.realm)
+        async def flows(self, realm):
+            return [
+                {"alias":"browser-default","providerId":"basic-flow"},
+                {"alias":"registration-default","providerId":"basic-flow"},
+                {"alias":"direct-default","providerId":"basic-flow"},
+                {"alias":"reset-default","providerId":"basic-flow"},
+                {"alias":"clients-default","providerId":"client-flow"},
+                {"alias":"docker-default","providerId":"basic-flow"},
+                {"alias":"broker-default","providerId":"basic-flow"},
+                {"alias":"browser-custom","providerId":"basic-flow"},
+            ]
+        async def update_realm_flow_bindings(self, realm, bindings): self.realm.update(bindings)
+    fake=FakeRealmClient()
+    monkeypatch.setattr(main,"kc",lambda instance_id:fake)
+    with TestClient(main.app) as client:
+        login=client.post('/api/auth/login',json={'username':'admin','password':'Admin-Test-Password-2026!'})
+        headers={'Authorization':f"Bearer {login.json()['access_token']}"}
+        got=client.get('/api/instances/i1/realms/demo/flow-bindings',headers=headers)
+        assert got.status_code==200 and got.json()["browserFlow"]=="browser-default"
+        changed=client.put('/api/instances/i1/realms/demo/flow-bindings',json={"browserFlow":"browser-custom"},headers=headers)
+        assert changed.status_code==200 and changed.json()["browserFlow"]=="browser-custom"
+        assert fake.realm["enabled"] is True
+        invalid=client.put('/api/instances/i1/realms/demo/flow-bindings',json={"browserFlow":"missing-flow"},headers=headers)
+        assert invalid.status_code==400
+        wrong_type=client.put('/api/instances/i1/realms/demo/flow-bindings',json={"clientAuthenticationFlow":"browser-custom"},headers=headers)
+        assert wrong_type.status_code==400

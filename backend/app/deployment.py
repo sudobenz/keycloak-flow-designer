@@ -31,7 +31,7 @@ async def _configure(kc, realm, execution_id, node, existing_execution=True):
         if config_id:
             await kc.delete_authenticator_config(realm, config_id)
         return
-    alias = node.get("configAlias") or f"KFD - {node.get('displayName','Execution')}"
+    alias = node.get("configAlias") or f"KFD - {node.get('displayName','Execution')} - {str(node.get('nodeId') or execution_id)[:8]}"
     body = {"alias": alias, "config": {str(k): str(v) for k,v in cfg.items()}}
     if config_id:
         try:
@@ -76,7 +76,8 @@ async def _sync_children(kc, realm, parent_alias, nodes, allow_deletes=False, cr
             before = {x.get("id") for x in await _list_exec(kc, realm, parent_alias)}
             if typ == "subflow":
                 sub_alias = node.get("alias") or node.get("remoteAlias") or _safe_alias(node.get("displayName", "subflow"), node.get("nodeId"))
-                await kc.create_subflow(realm, parent_alias, sub_alias, node.get("description", ""), "form" if node.get("flowType") in ("form", "form-flow") else "basic")
+                flow_type = "form" if node.get("flowType") in ("form", "form-flow") else "basic"
+                await kc.create_subflow(realm, parent_alias, sub_alias, node.get("description", ""), flow_type, node.get("formProviderId") or "registration-page-form")
                 item = await _find_created(kc, realm, parent_alias, before, flow_alias=sub_alias)
                 created.append({"kind":"execution","id":item["id"]})
                 child_alias = item.get("alias") or sub_alias
@@ -90,16 +91,35 @@ async def _sync_children(kc, realm, parent_alias, nodes, allow_deletes=False, cr
             if typ == "execution" and item.get("providerId") and item.get("providerId") != node.get("providerId"):
                 raise DeploymentError(f"Le provider de {node.get('displayName')} a changé. Supprimer puis recréer explicitement cette exécution.")
             if typ == "subflow" and item.get("authenticationFlow"):
-                child_alias = item.get("alias") or node.get("remoteAlias")
-                child_flow = next((f for f in await kc.flows(realm) if f.get("alias") == child_alias), None)
+                child_alias = item.get("alias") or item.get("displayName") or node.get("remoteAlias") or node.get("alias") or node.get("displayName")
+                child_flow = None
+                child_flow_id = node.get("remoteFlowId") or item.get("flowId")
+                if child_flow_id:
+                    try:
+                        child_flow = await kc.flow(realm, str(child_flow_id))
+                    except Exception:
+                        child_flow = None
+                if child_flow is None:
+                    child_flow = next((f for f in await kc.flows(realm) if f.get("alias") == child_alias), None)
                 if child_flow:
                     desired_type = "form-flow" if node.get("flowType") in ("form", "form-flow") else "basic-flow"
                     if child_flow.get("providerId") and child_flow.get("providerId") != desired_type:
                         raise DeploymentError(f"Le type du sous-flow {child_alias} ne peut pas être modifié en place. Recréez le sous-flow.")
-                    if node.get("alias") and node.get("alias") != child_alias:
-                        raise DeploymentError(f"Le renommage du sous-flow {child_alias} n'est pas pris en charge en mise à jour. Recréez-le avec son nouvel alias.")
-                    if node.get("description", "") != child_flow.get("description", ""):
-                        await kc.request("PUT", f"/admin/realms/{realm}/authentication/flows/{child_flow['id']}", json={**child_flow, "description": node.get("description", "")})
+                    if desired_type == "form-flow":
+                        current_form_provider = item.get("providerId")
+                        desired_form_provider = node.get("formProviderId") or "registration-page-form"
+                        if current_form_provider and current_form_provider != desired_form_provider:
+                            raise DeploymentError(f"Le FormAuthenticator du sous-flow {child_alias} ne peut pas être changé en place. Supprimez puis recréez le sous-flow.")
+                    desired_alias = (node.get("alias") or child_alias or "").strip()
+                    if desired_alias and desired_alias != child_alias:
+                        all_flows = await kc.flows(realm)
+                        conflict = next((flow for flow in all_flows if flow.get("alias") == desired_alias and flow.get("id") != child_flow.get("id")), None)
+                        if conflict:
+                            raise DeploymentError(f"Impossible de renommer le sous-flow : l'alias '{desired_alias}' existe déjà dans le Realm.")
+                        await kc.request("PUT", f"/admin/realms/{quote(realm, safe='')}/authentication/flows/{quote(str(child_flow['id']), safe='')}", json={**child_flow, "alias": desired_alias, "description": node.get("description", ""), "topLevel": False, "builtIn": False})
+                        child_alias = desired_alias
+                    elif node.get("description", "") != child_flow.get("description", ""):
+                        await kc.request("PUT", f"/admin/realms/{quote(realm, safe='')}/authentication/flows/{quote(str(child_flow['id']), safe='')}", json={**child_flow, "description": node.get("description", "")})
                 await _sync_children(kc, realm, child_alias, node.get("children", []), allow_deletes, created, match_untracked)
         if not item or not item.get("id"):
             raise DeploymentError(f"Élément non résolu : {node.get('displayName')}")
@@ -137,24 +157,109 @@ def _safe_alias(label: str, node_id: str | None):
 
 
 async def validate_against_keycloak(kc, realm: str, project: dict):
-    providers = await kc.providers(realm)
-    provider_ids = {p.get("id") or p.get("providerId") for p in (providers or [])}
-    errors = []
+    """Valide chaque exécution contre le SPI correspondant à son flow parent.
 
-    def collect(nodes, path="root"):
-        for node in nodes or []:
+    Basic flow -> AuthenticatorFactory ; Form flow -> FormActionFactory ;
+    Client flow -> ClientAuthenticatorFactory. Les FormActionFactory exposent
+    également ConfigurableAuthenticatorFactory, donc leur schéma peut être lu
+    via config-description comme les authenticator classiques.
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+    catalog_cache: dict[str, dict[str, dict]] = {}
+
+    async def provider_catalog(parent_flow_provider: str) -> dict[str, dict]:
+        if parent_flow_provider not in catalog_cache:
+            method_name = {
+                "form-flow": "form_action_providers",
+                "client-flow": "client_authenticator_providers",
+            }.get(parent_flow_provider, "providers")
+            method = getattr(kc, method_name, None)
+            if not callable(method):
+                catalog_cache[parent_flow_provider] = {}
+            else:
+                records = await method(realm) or []
+                catalog_cache[parent_flow_provider] = {
+                    str(item.get("id") or item.get("providerId")): item
+                    for item in records
+                    if item.get("id") or item.get("providerId")
+                }
+        return catalog_cache[parent_flow_provider]
+
+    async def collect(current_nodes, path="root", parent_flow_provider=None):
+        parent_flow_provider = parent_flow_provider or project.get("flow", {}).get("providerId", "basic-flow")
+        for node in current_nodes or []:
             name = node.get("displayName", node.get("providerId", "component"))
             if node.get("type") == "execution":
-                provider_id = node.get("providerId")
-                if provider_id and provider_ids and provider_id not in provider_ids:
-                    errors.append(f"{path}/{name}: provider '{provider_id}' absent de l'instance cible.")
+                provider_id = str(node.get("providerId") or "").strip()
+                if not provider_id:
+                    errors.append(f"{path}/{name}: Provider ID absent.")
+                    continue
+                providers = await provider_catalog(parent_flow_provider)
+                if not providers:
+                    spi_label = {
+                        "form-flow": "Form Action",
+                        "client-flow": "Client Authenticator",
+                    }.get(parent_flow_provider, "Authenticator")
+                    errors.append(
+                        f"{path}/{name}: Keycloak n'a retourné aucun provider {spi_label} ; "
+                        "vérifiez le catalogue et les droits Admin REST."
+                    )
+                    continue
+                if provider_id not in providers:
+                    errors.append(
+                        f"{path}/{name}: provider '{provider_id}' absent du catalogue "
+                        f"{parent_flow_provider}."
+                    )
+                    continue
+                config = node.get("config") or {}
+                if not isinstance(config, dict):
+                    errors.append(f"{path}/{name}: la configuration doit être un objet clé/valeur.")
+                    continue
+                try:
+                    description = await kc.config_description(realm, provider_id)
+                    properties = description.get("properties", []) if isinstance(description, dict) else []
+                    missing = []
+                    for prop in properties:
+                        prop_name = prop.get("name")
+                        required = prop.get("required") is True or str(prop.get("required", "")).lower() == "true"
+                        if not prop_name or not required:
+                            continue
+                        value = config.get(prop_name, prop.get("defaultValue"))
+                        if value is None or (isinstance(value, str) and not value.strip()):
+                            missing.append(prop_name)
+                    if missing:
+                        errors.append(f"{path}/{name}: paramètres obligatoires manquants : {', '.join(missing)}.")
+                except Exception as exc:
+                    warnings.append(f"{path}/{name}: schéma de configuration non vérifié pour '{provider_id}' ({exc}).")
             elif node.get("type") == "subflow":
-                collect(node.get("children", []), f"{path}/{name}")
+                if parent_flow_provider == "form-flow":
+                    errors.append(f"{path}/{name}: un Form flow ne peut pas contenir un sous-flow ; ajoutez des Form Actions.")
+                    continue
+                child_provider = "form-flow" if node.get("flowType") in ("form", "form-flow") else "basic-flow"
+                if child_provider == "form-flow":
+                    form_catalog_method = getattr(kc, "form_providers", None)
+                    form_provider_id = str(node.get("formProviderId") or "registration-page-form").strip()
+                    if not callable(form_catalog_method):
+                        errors.append(f"{path}/{name}: catalogue des FormAuthenticators indisponible.")
+                    else:
+                        try:
+                            form_records = await form_catalog_method(realm) or []
+                            form_ids = {str(item.get("id") or item.get("providerId")) for item in form_records if item.get("id") or item.get("providerId")}
+                            if not form_ids:
+                                errors.append(f"{path}/{name}: Keycloak n'a retourné aucun FormAuthenticator.")
+                            elif form_provider_id not in form_ids:
+                                errors.append(f"{path}/{name}: FormAuthenticator '{form_provider_id}' absent du catalogue form-providers.")
+                        except Exception as exc:
+                            errors.append(f"{path}/{name}: impossible de vérifier le FormAuthenticator '{form_provider_id}' ({exc}).")
+                await collect(node.get("children", []), f"{path}/{name}", child_provider)
 
-    collect(project.get("flow", {}).get("nodes", []))
+    nodes = project.get("flow", {}).get("nodes", [])
+    await collect(nodes)
     if errors:
-        raise DeploymentError("Providers incompatibles : " + " | ".join(errors))
-    return {"providerCount": len(provider_ids)}
+        raise DeploymentError("Validation Keycloak : " + " | ".join(errors))
+    provider_count = sum(len(items) for items in catalog_cache.values())
+    return {"providerCount": provider_count, "providerCatalogs": {key: len(value) for key, value in catalog_cache.items()}, "warnings": warnings}
 
 async def deploy_project(kc, realm: str, project: dict, mode: str, alias: str, allow_deletes: bool, target_instance_id: str | None = None):
     validation = validate_project(deepcopy(project))
