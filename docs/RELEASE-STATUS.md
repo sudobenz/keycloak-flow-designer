@@ -1,24 +1,23 @@
-# État de validation — Keycloak Flow Designer 1.2.3
+# État de validation — Keycloak Flow Designer 1.2.4
 
-## Correctif de compilation
+## Correction du déploiement
 
-- Remplacement de `vue-tsc -b` par `vue-tsc --noEmit -p tsconfig.json` dans l'étape de contrôle TypeScript.
-- Le projet frontend ne définit pas de configuration de build TypeScript (`composite` / références de projets). Le mode `-b` n'est donc pas adapté à ce projet autonome.
-- La commande `npm run build` exécute maintenant explicitement le contrôle de types, puis `vite build`.
-- Version applicative harmonisée en `1.2.3` dans le frontend, le backend, l'interface et la documentation.
+Le script `npm run build` exécute désormais `vite build` pour produire les fichiers statiques de production.
+Le contrôle statique Vue/TypeScript est conservé séparément via `npm run typecheck` et n'est pas exécuté dans le build Docker.
 
-## Résultats vérifiés dans l'environnement de préparation
+Cette séparation évite qu'une erreur de typage Vue non bloquante pour la transpilation Vite empêche la création de l'image frontend.
 
-- `cd backend && python -m pytest -q` : **40 tests réussis**.
-- `python -m compileall -q backend` : réussi.
-- Installation npm et build Vue/Vite : non exécutables dans l'environnement de préparation, l'accès à `registry.npmjs.org` échouant avec `EAI_AGAIN`.
-- Build Docker : non exécuté pour la même raison (dépendances npm non disponibles).
-- Tests d'intégration avec un serveur Keycloak réel : non exécutés.
+## Vérifications
 
-## Contrôles à exécuter sur la cible
+- Structure de l'archive : fichiers du projet directement à la racine.
+- Configuration Docker : le Dockerfile appelle `npm run build`.
+- Build Vite et build Docker : à confirmer dans l'environnement de déploiement, car l'accès au registre npm n'est pas disponible dans l'environnement de préparation de cette archive.
+- Tests backend : non revendiqués comme nouvellement exécutés pour cette livraison.
 
-1. Reconstruire la stack sans utiliser de cache afin de récupérer les dépendances et appliquer le nouveau script de build.
-2. Vérifier `http://<hôte>:<port>/health` : la version doit être `1.2.3`.
-3. Effectuer les scénarios fonctionnels décrits dans les versions précédentes sur un Realm de laboratoire.
+## Déploiement Portainer
 
-La correction retire le mode TypeScript `-b` inadapté à la configuration présente dans cette archive. Le build complet doit néanmoins être confirmé sur une machine disposant d'un accès au registre npm.
+1. Extraire l'archive complète.
+2. Utiliser le dossier contenant directement `docker-compose.yml` comme contexte de stack.
+3. Conserver ou adapter le fichier `.env` à partir de `.env.example`.
+4. Forcer la reconstruction des images sans cache.
+5. Vérifier les journaux des services `frontend` et `backend`.

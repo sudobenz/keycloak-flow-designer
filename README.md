@@ -3,11 +3,17 @@
 </p>
 
 
-## Keycloak Flow Designer — 1.2.3
+## Keycloak Flow Designer — 1.2.4
 
 Éditeur web pour concevoir, importer, contrôler et déployer des **Authentication Flows Keycloak**. L'éditeur suit le modèle natif de Keycloak : exécutions ordonnées, requirements et sous-flows Basic/Form. Il ne transpose pas artificiellement les graphes de transitions d'Authentik.
 
-## Nouveautés 1.2.3
+## Version 1.2.4 — correction du build frontend
+
+- Le build de production utilise directement Vite (`vite build`).
+- Le contrôle TypeScript reste disponible séparément avec `npm run typecheck` et ne bloque plus la construction de l’image Docker.
+- L’archive est fournie avec les fichiers à la racine, prêts pour Portainer.
+
+## Nouveautés 1.2.2
 
 - Correctif de création des sous-flows : utilisation des provider IDs Keycloak `basic-flow` / `form-flow`, et choix explicite du `FormAuthenticator` (par défaut `registration-page-form`).
 - Les FormAuthenticators et les Form Actions sont présentés séparément : le premier rend le formulaire, les secondes sont les étapes à l'intérieur du `form-flow`.
