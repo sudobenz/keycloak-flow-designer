@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, toRaw, watch } from 'vue'
 import { VueFlow, type Node, type Edge } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -34,7 +34,20 @@ const jsonConfig=ref('{}'), propertySchemas=ref<any[]>([]), templateSelection=re
 const selected=computed(()=>findNode(props.modelValue.flow.nodes||[],selectedId.value))
 const canDeploy=computed(()=>props.role==='admin' && !!instanceId.value && !!realm.value)
 function findNode(nodes:any[],id:string|null):any{if(!id)return null;for(const n of nodes||[]){if(n.nodeId===id)return n;const c=findNode(n.children||[],id);if(c)return c}return null}
-function clone(){return structuredClone(props.modelValue)}
+// Les props Vue sont des Proxy réactifs. structuredClone() ne sait pas cloner
+// directement un Proxy et levait DataCloneError au premier clic sur « Ajouter ».
+// On retire récursivement les Proxy Vue avant de cloner le modèle JSON.
+function unwrapVueProxy(value:any):any{
+ const raw=toRaw(value)
+ if(Array.isArray(raw))return raw.map((item:any)=>unwrapVueProxy(item))
+ if(raw&&typeof raw==='object'){
+  const result:any={}
+  for(const [key,item] of Object.entries(raw))result[key]=unwrapVueProxy(item)
+  return result
+ }
+ return raw
+}
+function clone(){return structuredClone(unwrapVueProxy(props.modelValue))}
 function applyTemplate(id:string){const template=flowTemplates.find(x=>x.id===id);templateSelection.value='';if(!template)return;if((props.modelValue.flow.nodes||[]).length&&!confirm('Remplacer le contenu actuel par ce modèle ?'))return;const p=clone();p.project={...p.project,name:template.label,description:template.description};p.flow=structuredClone(template.flow);p.target={};emitProject(p);selectedId.value=null;deployAlias.value=p.flow.alias;validation.value=null;emit('message',`Modèle « ${template.label} » chargé. Vérifier les providers avant le déploiement.`)}
 function emitProject(next:any){emit('update:modelValue',next)}
 function walk(nodes:any[],depth=0,parent='root',rows:any[]=[]){for(const n of nodes||[]){rows.push({...n,depth,parent});if(n.type==='subflow')walk(n.children||[],depth+1,n.nodeId,rows)}return rows}

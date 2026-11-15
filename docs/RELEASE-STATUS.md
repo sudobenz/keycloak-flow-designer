@@ -1,4 +1,4 @@
-# État de validation — Keycloak Flow Designer 1.0.5
+# État de validation — Keycloak Flow Designer 1.0.6
 
 ## Correctifs intégrés
 
@@ -25,14 +25,14 @@
 
 - `pytest -q` : 18 tests backend réussis après ajout d’un test de création de projet sans identifiant fourni par le navigateur, validation et exports JSON/YAML.
 - Analyse syntaxique TypeScript des blocs `<script setup>` de `Designer.vue` et `App.vue` : réussie. Cette vérification ne remplace pas `vue-tsc` ni `vite build`.
-- `frontend/package.json` : JSON valide, version 1.0.5.
+- `frontend/package.json` : JSON valide, version 1.0.6.
 - La compilation complète Vue/Vite n’a pas été exécutée : une tentative `npm install --ignore-scripts --no-audit --no-fund` a dépassé le délai disponible dans cet environnement. Le build frontend reste donc à confirmer après installation des dépendances.
 - Le build Docker n’a pas été exécuté : aucun moteur Docker/Podman n’est disponible ici.
 - La connexion et le déploiement sur une instance Keycloak réelle restent à qualifier dans l’environnement cible.
 
 ## Contrôle après déploiement
 
-1. Ouvrir `/health` sur l’adresse de l’application et vérifier que la réponse indique `version: 1.0.5`.
+1. Ouvrir `/health` sur l’adresse de l’application et vérifier que la réponse indique `version: 1.0.6`.
 2. Dans le Designer, sans sélectionner d’instance, ajouter un composant depuis la barre du canvas ou le catalogue local, puis cliquer sur **Enregistrer**.
 3. Connecter une instance et un Realm pour comparer le catalogue local au catalogue réellement exposé par Keycloak.
 4. Vérifier que le projet apparaît dans **Projets**.
@@ -40,3 +40,11 @@
 6. Si l’enregistrement échoue, relever le détail affiché dans l’interface et la ligne `POST /api/projects` dans les logs backend.
 
 La version ne doit pas être considérée comme certifiée en production avant un build frontend réussi, une reconstruction Docker, puis des essais sur un Realm Keycloak de recette.
+
+
+## 1.0.6 — correction de l'ajout de composants
+
+- Défaut identifié : `structuredClone(props.modelValue)` recevait le Proxy réactif fourni par Vue et pouvait échouer avec `DataCloneError`.
+- Correction : déballage récursif via `toRaw()` avant le clonage.
+- À vérifier après déploiement : cliquer sur un composant du catalogue doit créer un nœud, le sélectionner et l'afficher dans l'arborescence et les propriétés.
+- La compilation frontend et le build Docker restent à exécuter dans l'environnement de déploiement.

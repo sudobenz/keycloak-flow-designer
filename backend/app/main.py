@@ -23,7 +23,7 @@ async def lifespan(app):
     init_admin()
     yield
 
-app = FastAPI(title="Keycloak Flow Designer API", version="1.0.5", description="Conception, import, validation et déploiement contrôlé des Authentication Flows Keycloak.", docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None, lifespan=lifespan)
+app = FastAPI(title="Keycloak Flow Designer API", version="1.0.6", description="Conception, import, validation et déploiement contrôlé des Authentication Flows Keycloak.", docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None, lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_credentials=True, allow_methods=["GET","POST","PUT","PATCH","DELETE"], allow_headers=["Authorization","Content-Type"])
 LOGIN_ATTEMPTS = {}
 LOGIN_WINDOW_SECONDS = 600
@@ -83,7 +83,7 @@ def project_get(project_id):
     return restore_project_secrets(read_json(path,{}))
 
 @app.get("/health")
-def health(): return {"status":"ok","version":"1.0.5"}
+def health(): return {"status":"ok","version":"1.0.6"}
 
 @app.post("/api/auth/login")
 def login(data: LoginInput, request: Request):

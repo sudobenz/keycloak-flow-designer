@@ -1,13 +1,14 @@
-# Keycloak Flow Designer — 1.0.5
+# Keycloak Flow Designer — 1.0.6
 
 Éditeur web autonome pour concevoir, importer, valider et déployer des Authentication Flows Keycloak.
 
-## Corrections 1.0.1 à 1.0.5
+## Corrections 1.0.1 à 1.0.6
 
 - Correction du typage TypeScript dans le déplacement des nœuds de l’arborescence.
 - En 1.0.3, la gestion de session ne supprime plus le jeton sur tous les HTTP 401.
 - En 1.0.4, les opérations Valider et Export utilisent l’identifiant renvoyé après la sauvegarde et s’arrêtent si celle-ci échoue.
 - En 1.0.5, le canvas dispose de contrôles d’ajout directs, d’un catalogue local de composants utilisable hors connexion, d’une recherche et d’un ajout de Provider ID personnalisé.
+- En 1.0.6, le modèle réactif Vue est déballé récursivement avant clonage, ce qui corrige l’échec `DataCloneError` lors de l’ajout ou de la modification des composants.
 
 ## Fonctions livrées
 
@@ -99,3 +100,10 @@ L'intégration utilise les endpoints Admin REST Authentication Management dispon
 - L'éditeur représente la structure d'exécutions ordonnée de Keycloak ; il ne propose pas un moteur de branchement arbitraire. Les requirements sont ceux du moteur Keycloak.
 - La simulation d'authentification réelle doit être effectuée sur un Realm de test avec de vrais navigateurs/clients ; la validation interne est structurelle.
 - L'API d'administration Keycloak varie selon la version. Tester d'abord sur un Realm de laboratoire avant toute modification d'un flow utilisé en production.
+
+
+## Version 1.0.6
+
+- Correction du clonage du modèle dans l'éditeur : les Proxy réactifs Vue sont déballés récursivement avant `structuredClone`.
+- Le clic sur un authenticator, un sous-flux ou le bouton d'ajout ne doit plus échouer avec `DataCloneError`.
+- La même correction couvre les modifications, suppressions, déplacements, sauvegardes, validations et exports qui utilisent le clone du modèle.
