@@ -1,6 +1,7 @@
 <p align="center">
   <img src="assets/banner.png" alt="Keycloak Flow Designer" width="100%">
 </p>
+
 ## Keycloak Flow Designer — 1.0.6
 
 Éditeur web autonome pour concevoir, importer, valider et déployer des Authentication Flows Keycloak.
