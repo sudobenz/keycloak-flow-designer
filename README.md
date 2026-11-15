@@ -1,4 +1,9 @@
-# Keycloak Flow Designer — 1.2.2
+<p align="center">
+  <img src="assets/banner.png" alt="Keycloak Flow Designer" width="100%">
+</p>
+
+
+## Keycloak Flow Designer — 1.2.2
 
 Éditeur web pour concevoir, importer, contrôler et déployer des **Authentication Flows Keycloak**. L'éditeur suit le modèle natif de Keycloak : exécutions ordonnées, requirements et sous-flows Basic/Form. Il ne transpose pas artificiellement les graphes de transitions d'Authentik.
 
