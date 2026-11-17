@@ -1,23 +1,21 @@
-# État de validation — Keycloak Flow Designer 1.2.4
+# État de validation — Keycloak Flow Designer 1.2.5
 
-## Correction du déploiement
+## Correction du build
 
-Le script `npm run build` exécute désormais `vite build` pour produire les fichiers statiques de production.
-Le contrôle statique Vue/TypeScript est conservé séparément via `npm run typecheck` et n'est pas exécuté dans le build Docker.
+La version 1.2.5 corrige une balise `<template>` manquante dans `frontend/src/components/Designer.vue`. Le bloc conditionnel `v-if="selected"` du panneau des propriétés n'était pas fermé avant son `v-else`.
 
-Cette séparation évite qu'une erreur de typage Vue non bloquante pour la transpilation Vite empêche la création de l'image frontend.
+Le script de production reste `vite build`. Le contrôle Vue/TypeScript est disponible séparément via `npm run typecheck`.
 
-## Vérifications
+## Vérifications effectuées
 
-- Structure de l'archive : fichiers du projet directement à la racine.
-- Configuration Docker : le Dockerfile appelle `npm run build`.
-- Build Vite et build Docker : à confirmer dans l'environnement de déploiement, car l'accès au registre npm n'est pas disponible dans l'environnement de préparation de cette archive.
-- Tests backend : non revendiqués comme nouvellement exécutés pour cette livraison.
+- Structure des blocs `<template>` contrôlée après correction.
+- Archive vérifiée : `docker-compose.yml` est à la racine et le frontend possède son Dockerfile.
+- Le build réel Vite/Docker n'a pas pu être exécuté dans l'environnement de préparation, car le registre npm est inaccessible (résolution DNS `EAI_AGAIN`).
 
 ## Déploiement Portainer
 
 1. Extraire l'archive complète.
 2. Utiliser le dossier contenant directement `docker-compose.yml` comme contexte de stack.
-3. Conserver ou adapter le fichier `.env` à partir de `.env.example`.
+3. Conserver ou adapter `.env` à partir de `.env.example`.
 4. Forcer la reconstruction des images sans cache.
-5. Vérifier les journaux des services `frontend` et `backend`.
+5. En cas d'échec, récupérer les lignes d'erreur détaillées qui précèdent la ligne `npm run build`.

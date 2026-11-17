@@ -670,6 +670,7 @@ watch(()=>formActionProviders.value,()=>{
      <p class="hint">Sélectionnez ce sous-flow puis ajoutez un composant pour créer son contenu. Un sous-flow Basic contient des Authenticators et peut être REQUIRED, ALTERNATIVE, CONDITIONAL ou DISABLED. Un sous-flow Form contient des Form Actions ; son requirement est limité à REQUIRED ou DISABLED. Les deux familles de providers ne sont pas interchangeables.</p>
     </template>
    </template>
+   </template>
    <p v-else class="empty">Sélectionnez un composant dans le canvas ou l’arborescence.</p>
    <div v-if="validation" class="validation" :class="validation.valid?'ok':'bad'"><b>{{validation.valid?'Validation réussie':'Erreurs de validation'}}</b><p v-for="e in validation.errors" :key="e">{{e}}</p><p v-for="w in validation.warnings" :key="w">Attention : {{w}}</p></div>
   </aside>

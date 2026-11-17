@@ -1,11 +1,11 @@
-<p align="center">
-  <img src="assets/banner.png" alt="Keycloak Flow Designer" width="100%">
-</p>
-
-
-## Keycloak Flow Designer — 1.2.4
+# Keycloak Flow Designer — 1.2.5
 
 Éditeur web pour concevoir, importer, contrôler et déployer des **Authentication Flows Keycloak**. L'éditeur suit le modèle natif de Keycloak : exécutions ordonnées, requirements et sous-flows Basic/Form. Il ne transpose pas artificiellement les graphes de transitions d'Authentik.
+
+## Version 1.2.5 — correction de la compilation Vue
+
+- Fermeture du bloc `<template v-if="selected">` dans `Designer.vue`, oublié avant le `v-else` du panneau des propriétés.
+- Cette erreur de structure Vue empêchait la compilation du frontend.
 
 ## Version 1.2.4 — correction du build frontend
 
